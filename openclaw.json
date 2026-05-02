@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "2026.3.13",
-    "lastTouchedAt": "2026-05-02T03:41:00.131Z"
+    "lastTouchedAt": "2026-05-02T03:53:00.760Z"
   },
   "wizard": {
     "lastRunAt": "2026-02-05T16:16:05.545Z",
@@ -287,7 +287,8 @@
     "controlUi": {
       "enabled": true,
       "allowedOrigins": [
-        "https://dev.coze.site"
+        "https://dev.coze.site",
+        "https://5f2f22ee-4709-4144-bda2-967b0081d203.dev.coze.site"
       ],
       "dangerouslyDisableDeviceAuth": true
     },
