@@ -1,0 +1,14 @@
+{
+  "id": "openclaw-channel-dmwork",
+  "channels": [
+    "dmwork"
+  ],
+  "skills": [
+    "./skills"
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
