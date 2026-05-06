@@ -1,67 +1,51 @@
-import express from 'express';
-import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import { createMaterial } from '../models/Material.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/**
+ * 素材库 API 路由
+ */
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 
 const router = express.Router();
 
 // 数据存储文件路径
-const DATA_FILE = path.join(__dirname, '../data/materials.json');
+const DATA_DIR = path.join(__dirname, '../data');
+const DATA_FILE = path.join(DATA_DIR, 'materials.json');
 
 // 确保数据目录存在
-const dataDir = path.join(__dirname, '../data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// 确保上传目录存在
-const uploadDir = path.join(__dirname, '../uploads');
-['characters', 'scenes', 'props', 'backgrounds'].forEach(dir => {
-  const dirPath = path.join(uploadDir, dir);
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-});
+// 初始化数据文件
+if (!fs.existsSync(DATA_FILE)) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+}
 
 // 读取数据
 function readData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const data = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error('读取数据失败:', e);
-  }
-  return [];
+  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
 }
 
-// 保存数据
-function saveData(data) {
+// 写入数据
+function writeData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// Multer 配置
+// 配置 multer 上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const type = req.body.type || 'scenes';
-    const dir = path.join(uploadDir, type);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    const uploadDir = path.join(__dirname, '../uploads/materials');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
-    cb(null, dir);
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const filename = `${uuidv4()}${ext}`;
-    cb(null, filename);
-  }
+    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
 });
 
 const upload = multer({
@@ -74,74 +58,115 @@ const upload = multer({
     } else {
       cb(new Error('只支持 JPG、PNG、WebP、GIF 格式'));
     }
-  }
+  },
 });
 
-// GET /api/materials - 获取素材列表
+// ==================== 素材 API ====================
+
+// 获取所有素材
 router.get('/', (req, res) => {
   try {
-    const { type, category, search, page = 1, limit = 20 } = req.query;
+    const { type, category, search, projectId } = req.query;
     let materials = readData();
 
-    // 筛选
+    // 类型筛选
     if (type) {
       materials = materials.filter(m => m.type === type);
     }
+
+    // 分类筛选
     if (category) {
       materials = materials.filter(m => m.category === category);
     }
+
+    // 项目筛选
+    if (projectId) {
+      materials = materials.filter(m => m.projectId === projectId);
+    }
+
+    // 搜索
     if (search) {
       const keyword = search.toLowerCase();
-      materials = materials.filter(m =>
-        m.name.toLowerCase().includes(keyword) ||
-        m.tags.some(t => t.toLowerCase().includes(keyword))
+      materials = materials.filter(
+        m =>
+          m.name.toLowerCase().includes(keyword) ||
+          (m.tags && m.tags.some(t => t.toLowerCase().includes(keyword)))
       );
     }
 
-    // 分页
-    const total = materials.length;
-    const start = (page - 1) * limit;
-    const end = start + parseInt(limit);
-    materials = materials.slice(start, end);
-
-    res.json({
-      success: true,
-      data: materials,
-      pagination: { total, page: parseInt(page), limit: parseInt(limit) }
-    });
+    res.json({ success: true, data: materials });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// POST /api/materials - 上传素材
-router.post('/', upload.single('file'), (req, res) => {
+// 上传素材
+router.post('/upload', upload.array('files', 20), (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, error: '请上传文件' });
+    const { name, type, category, tags, projectId } = req.body;
+    const materials = readData();
+    const newMaterials = [];
+
+    for (const file of req.files) {
+      const material = {
+        id: uuidv4(),
+        name: name || file.originalname,
+        url: `/uploads/materials/${file.filename}`,
+        thumbnail: `/uploads/materials/${file.filename}`,
+        type: type || 'other',
+        category: category || '默认',
+        tags: tags ? tags.split(',').map(t => t.trim()) : [],
+        projectId: projectId || null,
+        metadata: {
+          originalName: file.originalname,
+          size: file.size,
+          format: path.extname(file.originalname).slice(1),
+          width: 0,
+          height: 0,
+        },
+        usedInScenes: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      materials.push(material);
+      newMaterials.push(material);
     }
 
-    const { name, type = 'scene', category = '', tags = '', characterId = null } = req.body;
-    
-    const material = createMaterial({
-      name: name || req.file.originalname,
-      url: `/uploads/${type}/${req.file.filename}`,
-      thumbnail: `/uploads/${type}/${req.file.filename}`,
-      type,
-      category,
-      tags: tags ? tags.split(',').map(t => t.trim()) : [],
-      characterId,
-      metadata: {
-        width: 0,
-        height: 0,
-        size: req.file.size,
-        format: path.extname(req.file.filename).replace('.', '')
-      }
-    });
+    writeData(materials);
+    res.json({ success: true, data: newMaterials });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
+// 保存 AI 生成的素材
+router.post('/save-ai', (req, res) => {
+  try {
+    const { imageUrl, name, type, category, tags, projectId } = req.body;
     const materials = readData();
+
+    const material = {
+      id: uuidv4(),
+      name: name || 'AI生成素材',
+      url: imageUrl,
+      thumbnail: imageUrl,
+      type: type || 'other',
+      category: category || 'AI生成',
+      tags: tags || ['AI生成'],
+      projectId: projectId || null,
+      metadata: {
+        source: 'ai',
+        format: 'png',
+        size: 0,
+      },
+      usedInScenes: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
     materials.push(material);
-    saveData(materials);
+    writeData(materials);
 
     res.json({ success: true, data: material });
   } catch (error) {
@@ -149,12 +174,12 @@ router.post('/', upload.single('file'), (req, res) => {
   }
 });
 
-// GET /api/materials/:id - 获取单个素材
+// 获取单个素材
 router.get('/:id', (req, res) => {
   try {
     const materials = readData();
     const material = materials.find(m => m.id === req.params.id);
-    
+
     if (!material) {
       return res.status(404).json({ success: false, error: '素材不存在' });
     }
@@ -165,31 +190,37 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// PUT /api/materials/:id - 更新素材
+// 更新素材
 router.put('/:id', (req, res) => {
   try {
     const materials = readData();
     const index = materials.findIndex(m => m.id === req.params.id);
-    
+
     if (index === -1) {
       return res.status(404).json({ success: false, error: '素材不存在' });
     }
 
-    materials[index] = { ...materials[index], ...req.body, id: req.params.id };
-    saveData(materials);
+    materials[index] = {
+      ...materials[index],
+      ...req.body,
+      id: materials[index].id, // 保持原 ID
+      createdAt: materials[index].createdAt, // 保持创建时间
+      updatedAt: new Date().toISOString(),
+    };
 
+    writeData(materials);
     res.json({ success: true, data: materials[index] });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// DELETE /api/materials/:id - 删除素材
+// 删除素材
 router.delete('/:id', (req, res) => {
   try {
-    let materials = readData();
+    const materials = readData();
     const material = materials.find(m => m.id === req.params.id);
-    
+
     if (!material) {
       return res.status(404).json({ success: false, error: '素材不存在' });
     }
@@ -200,14 +231,71 @@ router.delete('/:id', (req, res) => {
       fs.unlinkSync(filePath);
     }
 
-    // 删除数据
-    materials = materials.filter(m => m.id !== req.params.id);
-    saveData(materials);
+    // 从数据中移除
+    const filteredMaterials = materials.filter(m => m.id !== req.params.id);
+    writeData(filteredMaterials);
 
-    res.json({ success: true, message: '删除成功' });
+    res.json({ success: true, message: '素材已删除' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-export default router;
+// 批量删除素材
+router.post('/delete-batch', (req, res) => {
+  try {
+    const { ids } = req.body;
+    const materials = readData();
+    const toDelete = [];
+
+    for (const id of ids) {
+      const material = materials.find(m => m.id === id);
+      if (material) {
+        // 删除文件
+        const filePath = path.join(__dirname, '..', material.url);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+        toDelete.push(id);
+      }
+    }
+
+    const filteredMaterials = materials.filter(m => !toDelete.includes(m.id));
+    writeData(filteredMaterials);
+
+    res.json({ success: true, message: `已删除 ${toDelete.length} 个素材` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 获取素材统计
+router.get('/stats/overview', (req, res) => {
+  try {
+    const materials = readData();
+    const stats = {
+      total: materials.length,
+      byType: {},
+      byCategory: {},
+      recentAdded: materials
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 10),
+    };
+
+    // 按类型统计
+    materials.forEach(m => {
+      stats.byType[m.type] = (stats.byType[m.type] || 0) + 1;
+    });
+
+    // 按分类统计
+    materials.forEach(m => {
+      stats.byCategory[m.category] = (stats.byCategory[m.category] || 0) + 1;
+    });
+
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+module.exports = router;

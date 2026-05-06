@@ -1,59 +1,56 @@
-import express from 'express';
-import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/**
+ * 角色库 API 路由
+ */
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 
 const router = express.Router();
 
 // 数据存储文件路径
-const DATA_FILE = path.join(__dirname, '../data/characters.json');
+const DATA_DIR = path.join(__dirname, '../data');
+const DATA_FILE = path.join(DATA_DIR, 'characters.json');
 
 // 确保数据目录存在
-const dataDir = path.join(__dirname, '../data');
-const uploadDir = path.join(__dirname, '../uploads/characters');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
-[dataDir, uploadDir].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
+// 初始化数据文件
+if (!fs.existsSync(DATA_FILE)) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+}
 
 // 读取数据
 function readData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const data = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error('读取数据失败:', e);
-  }
-  return [];
+  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
 }
 
-// 保存数据
-function saveData(data) {
+// 写入数据
+function writeData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// Multer 配置 - 角色参考图上传
+// 配置 multer 上传
 const storage = multer.diskStorage({
-  destination: (req, cb) => cb(null, uploadDir),
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/characters');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const filename = `char_${uuidv4()}${ext}`;
-    cb(null, filename);
-  }
+    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
@@ -61,77 +58,75 @@ const upload = multer({
     } else {
       cb(new Error('只支持 JPG、PNG、WebP 格式'));
     }
-  }
+  },
 });
 
-// GET /api/characters - 获取角色列表
+// ==================== 角色 API ====================
+
+// 获取所有角色
 router.get('/', (req, res) => {
   try {
-    const characters = readData();
+    const { projectId } = req.query;
+    let characters = readData();
+
+    if (projectId) {
+      characters = characters.filter(c => c.projectId === projectId);
+    }
+
     res.json({ success: true, data: characters });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// POST /api/characters - 创建角色
-router.post('/', (req, res) => {
-  try {
-    const { name, description = '', traits = [], voice = '', colorPalette = [] } = req.body;
-    
-    const character = {
-      id: uuidv4(),
-      name,
-      description,
-      referenceImages: [],
-      traits: traits || [],
-      voice,
-      colorPalette: colorPalette || [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const characters = readData();
-    characters.push(character);
-    saveData(characters);
-
-    res.json({ success: true, data: character });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// POST /api/characters/:id/images - 上传角色参考图
-router.post('/:id/images', upload.array('images', 10), (req, res) => {
+// 获取单个角色
+router.get('/:id', (req, res) => {
   try {
     const characters = readData();
     const character = characters.find(c => c.id === req.params.id);
-    
+
     if (!character) {
       return res.status(404).json({ success: false, error: '角色不存在' });
     }
 
-    const newImages = req.files.map(f => ({
-      url: `/uploads/characters/${f.filename}`,
-      filename: f.filename
-    }));
-
-    character.referenceImages = [...character.referenceImages, ...newImages];
-    character.updatedAt = new Date().toISOString();
-    saveData(characters);
-
     res.json({ success: true, data: character });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// PUT /api/characters/:id - 更新角色
+// 创建角色
+router.post('/', (req, res) => {
+  try {
+    const characters = readData();
+    const character = {
+      id: uuidv4(),
+      name: req.body.name || '新角色',
+      description: req.body.description || '',
+      projectId: req.body.projectId || null,
+      referenceImages: req.body.referenceImages || [],
+      traits: req.body.traits || [],
+      voice: req.body.voice || '',
+      colorPalette: req.body.colorPalette || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    characters.push(character);
+    writeData(characters);
+
+    res.status(201).json({ success: true, data: character });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 更新角色
 router.put('/:id', (req, res) => {
   try {
     const characters = readData();
     const index = characters.findIndex(c => c.id === req.params.id);
-    
+
     if (index === -1) {
       return res.status(404).json({ success: false, error: '角色不存在' });
     }
@@ -139,10 +134,63 @@ router.put('/:id', (req, res) => {
     characters[index] = {
       ...characters[index],
       ...req.body,
-      id: req.params.id,
-      updatedAt: new Date().toISOString()
+      id: characters[index].id,
+      createdAt: characters[index].createdAt,
+      updatedAt: new Date().toISOString(),
     };
-    saveData(characters);
+
+    writeData(characters);
+    res.json({ success: true, data: characters[index] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 删除角色
+router.delete('/:id', (req, res) => {
+  try {
+    const characters = readData();
+    const character = characters.find(c => c.id === req.params.id);
+
+    if (!character) {
+      return res.status(404).json({ success: false, error: '角色不存在' });
+    }
+
+    // 删除参考图文件
+    for (const img of character.referenceImages) {
+      const filePath = path.join(__dirname, '..', img);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    const filteredCharacters = characters.filter(c => c.id !== req.params.id);
+    writeData(filteredCharacters);
+
+    res.json({ success: true, message: '角色已删除' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 上传角色参考图
+router.post('/:id/upload-ref', upload.array('images', 5), (req, res) => {
+  try {
+    const characters = readData();
+    const index = characters.findIndex(c => c.id === req.params.id);
+
+    if (index === -1) {
+      return res.status(404).json({ success: false, error: '角色不存在' });
+    }
+
+    const newImages = req.files.map(file => `/uploads/characters/${file.filename}`);
+    characters[index].referenceImages = [
+      ...(characters[index].referenceImages || []),
+      ...newImages,
+    ];
+    characters[index].updatedAt = new Date().toISOString();
+
+    writeData(characters);
 
     res.json({ success: true, data: characters[index] });
   } catch (error) {
@@ -150,31 +198,90 @@ router.put('/:id', (req, res) => {
   }
 });
 
-// DELETE /api/characters/:id - 删除角色
-router.delete('/:id', (req, res) => {
+// 删除角色参考图
+router.delete('/:id/ref/:imageIndex', (req, res) => {
   try {
-    let characters = readData();
-    const character = characters.find(c => c.id === req.params.id);
-    
-    if (!character) {
+    const characters = readData();
+    const index = characters.findIndex(c => c.id === req.params.id);
+
+    if (index === -1) {
       return res.status(404).json({ success: false, error: '角色不存在' });
     }
 
-    // 删除参考图文件
-    character.referenceImages.forEach(img => {
-      const filePath = path.join(__dirname, '..', img.url);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    });
+    const imageIndex = parseInt(req.params.imageIndex);
+    const images = characters[index].referenceImages || [];
 
-    characters = characters.filter(c => c.id !== req.params.id);
-    saveData(characters);
+    if (imageIndex < 0 || imageIndex >= images.length) {
+      return res.status(404).json({ success: false, error: '图片不存在' });
+    }
 
-    res.json({ success: true, message: '删除成功' });
+    // 删除文件
+    const filePath = path.join(__dirname, '..', images[imageIndex]);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // 从数组中移除
+    characters[index].referenceImages = images.filter((_, i) => i !== imageIndex);
+    characters[index].updatedAt = new Date().toISOString();
+
+    writeData(characters);
+
+    res.json({ success: true, data: characters[index] });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-export default router;
+// 生成角色特征词 (Prompt 优化)
+router.post('/:id/generate-prompt', (req, res) => {
+  try {
+    const characters = readData();
+    const character = characters.find(c => c.id === req.params.id);
+
+    if (!character) {
+      return res.status(404).json({ success: false, error: '角色不存在' });
+    }
+
+    // 构建特征描述
+    const traitDescriptions = {
+      hair: { 银发: 'silver long hair', 金发: 'blonde hair', 黑发: 'black long hair', 红发: 'red hair' },
+      eyes: { 红瞳: 'red eyes', 蓝瞳: 'blue eyes', 绿瞳: 'green eyes', 紫瞳: 'purple eyes' },
+      style: { 哥特: 'gothic style', 校园: 'school uniform', 古风: 'traditional Chinese clothing', 休闲: 'casual clothing' },
+    };
+
+    let promptParts = [];
+
+    // 添加特征词
+    if (character.traits && character.traits.length > 0) {
+      for (const trait of character.traits) {
+        for (const [key, desc] of Object.entries(traitDescriptions.hair)) {
+          if (trait.includes(key)) promptParts.push(desc);
+        }
+        for (const [key, desc] of Object.entries(traitDescriptions.eyes)) {
+          if (trait.includes(key)) promptParts.push(desc);
+        }
+        for (const [key, desc] of Object.entries(traitDescriptions.style)) {
+          if (trait.includes(key)) promptParts.push(desc);
+        }
+      }
+    }
+
+    // 添加配色
+    if (character.colorPalette && character.colorPalette.length > 0) {
+      promptParts.push(...character.colorPalette.map(c => `${c} color scheme`));
+    }
+
+    // 添加基础描述
+    promptParts.push(character.description || '');
+    promptParts.push('anime style, high quality');
+
+    const prompt = promptParts.filter(Boolean).join(', ');
+
+    res.json({ success: true, data: { prompt, traits: character.traits } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+module.exports = router;

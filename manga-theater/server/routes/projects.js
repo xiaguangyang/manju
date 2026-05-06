@@ -19,12 +19,12 @@ router.get('/projects', (req, res) => {
         ...p,
         episodeCount: episodes.length,
         sceneCount: scenes.length,
-        completedCount: scenes.filter(s => s.status === 'completed').length,
+        completedScenes: scenes.filter(s => s.status === 'completed').length,
       };
     });
-    res.json(projectsWithStats);
+    res.json({ success: true, data: projectsWithStats });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -33,11 +33,13 @@ router.get('/projects/:id', (req, res) => {
   try {
     const project = Project.findById(req.params.id);
     if (!project) {
-      return res.status(404).json({ error: '项目不存在' });
+      return res.status(404).json({ success: false, error: '项目不存在' });
     }
-    res.json(project);
+    // 附加剧集列表
+    const episodes = Episode.findByProject(project.id);
+    res.json({ success: true, data: { ...project, episodes } });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -45,9 +47,9 @@ router.get('/projects/:id', (req, res) => {
 router.post('/projects', (req, res) => {
   try {
     const project = Project.create(req.body);
-    res.status(201).json(project);
+    res.status(201).json({ success: true, data: project });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -56,34 +58,45 @@ router.put('/projects/:id', (req, res) => {
   try {
     const project = Project.update(req.params.id, req.body);
     if (!project) {
-      return res.status(404).json({ error: '项目不存在' });
+      return res.status(404).json({ success: false, error: '项目不存在' });
     }
-    res.json(project);
+    res.json({ success: true, data: project });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // 删除项目
 router.delete('/projects/:id', (req, res) => {
   try {
-    Project.delete(req.params.id);
-    res.json({ success: true });
+    const result = Project.delete(req.params.id);
+    if (!result) {
+      return res.status(404).json({ success: false, error: '项目不存在' });
+    }
+    res.json({ success: true, message: '项目已删除' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // ==================== 剧集路由 ====================
 
-// 获取所有剧集（支持按projectId筛选）
-router.get('/episodes', (req, res) => {
+// 获取项目的所有剧集
+router.get('/projects/:projectId/episodes', (req, res) => {
   try {
-    const { projectId } = req.query;
-    const episodes = Episode.findAll(projectId);
-    res.json(episodes);
+    const episodes = Episode.findByProject(req.params.projectId);
+    // 附加分镜统计
+    const episodesWithStats = episodes.map(e => {
+      const scenes = Scene.findByEpisode(e.id);
+      return {
+        ...e,
+        sceneCount: scenes.length,
+        completedScenes: scenes.filter(s => s.status === 'completed').length,
+      };
+    });
+    res.json({ success: true, data: episodesWithStats });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -92,11 +105,13 @@ router.get('/episodes/:id', (req, res) => {
   try {
     const episode = Episode.findById(req.params.id);
     if (!episode) {
-      return res.status(404).json({ error: '剧集不存在' });
+      return res.status(404).json({ success: false, error: '剧集不存在' });
     }
-    res.json(episode);
+    // 附加分镜列表
+    const scenes = Scene.findByEpisode(episode.id);
+    res.json({ success: true, data: { ...episode, scenes } });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -104,9 +119,9 @@ router.get('/episodes/:id', (req, res) => {
 router.post('/episodes', (req, res) => {
   try {
     const episode = Episode.create(req.body);
-    res.status(201).json(episode);
+    res.status(201).json({ success: true, data: episode });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -115,47 +130,36 @@ router.put('/episodes/:id', (req, res) => {
   try {
     const episode = Episode.update(req.params.id, req.body);
     if (!episode) {
-      return res.status(404).json({ error: '剧集不存在' });
+      return res.status(404).json({ success: false, error: '剧集不存在' });
     }
-    res.json(episode);
+    res.json({ success: true, data: episode });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // 删除剧集
 router.delete('/episodes/:id', (req, res) => {
   try {
-    Episode.delete(req.params.id);
-    res.json({ success: true });
+    const result = Episode.delete(req.params.id);
+    if (!result) {
+      return res.status(404).json({ success: false, error: '剧集不存在' });
+    }
+    res.json({ success: true, message: '剧集已删除' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // ==================== 分镜路由 ====================
 
-// 获取所有分镜（支持按episodeId筛选）
-router.get('/scenes', (req, res) => {
+// 获取剧集的所有分镜
+router.get('/scenes/episode/:episodeId', (req, res) => {
   try {
-    const { episodeId } = req.query;
-    const scenes = Scene.findAll(episodeId);
-    res.json(scenes);
+    const scenes = Scene.findByEpisode(req.params.episodeId);
+    res.json({ success: true, data: scenes });
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 获取单个分镜
-router.get('/scenes/:id', (req, res) => {
-  try {
-    const scene = Scene.findById(req.params.id);
-    if (!scene) {
-      return res.status(404).json({ error: '分镜不存在' });
-    }
-    res.json(scene);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -163,19 +167,19 @@ router.get('/scenes/:id', (req, res) => {
 router.post('/scenes', (req, res) => {
   try {
     const scene = Scene.create(req.body);
-    res.status(201).json(scene);
+    res.status(201).json({ success: true, data: scene });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // 批量创建分镜
 router.post('/scenes/batch', (req, res) => {
   try {
-    const scenes = Scene.createMany(req.body.scenes);
-    res.status(201).json(scenes);
+    const scenes = Scene.createBatch(req.body.scenes);
+    res.status(201).json({ success: true, data: scenes });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -184,57 +188,46 @@ router.put('/scenes/:id', (req, res) => {
   try {
     const scene = Scene.update(req.params.id, req.body);
     if (!scene) {
-      return res.status(404).json({ error: '分镜不存在' });
+      return res.status(404).json({ success: false, error: '分镜不存在' });
     }
-    res.json(scene);
+    res.json({ success: true, data: scene });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // 删除分镜
 router.delete('/scenes/:id', (req, res) => {
   try {
-    Scene.delete(req.params.id);
-    res.json({ success: true });
+    const result = Scene.delete(req.params.id);
+    if (!result) {
+      return res.status(404).json({ success: false, error: '分镜不存在' });
+    }
+    res.json({ success: true, message: '分镜已删除' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 批量更新分镜顺序
-router.put('/scenes/reorder/:episodeId', (req, res) => {
+// 重新排序分镜
+router.put('/scenes/reorder', (req, res) => {
   try {
-    Scene.reorder(req.params.episodeId, req.body.orderedIds);
-    res.json({ success: true });
+    Scene.reorder(req.body.sceneIds);
+    res.json({ success: true, message: '分镜已重新排序' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // ==================== 角色路由 ====================
 
-// 获取所有角色
-router.get('/characters', (req, res) => {
+// 获取项目的所有角色
+router.get('/characters/project/:projectId', (req, res) => {
   try {
-    const { projectId } = req.query;
-    const characters = Character.findAll(projectId);
-    res.json(characters);
+    const characters = Character.findByProject(req.params.projectId);
+    res.json({ success: true, data: characters });
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 获取单个角色
-router.get('/characters/:id', (req, res) => {
-  try {
-    const character = Character.findById(req.params.id);
-    if (!character) {
-      return res.status(404).json({ error: '角色不存在' });
-    }
-    res.json(character);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -242,9 +235,9 @@ router.get('/characters/:id', (req, res) => {
 router.post('/characters', (req, res) => {
   try {
     const character = Character.create(req.body);
-    res.status(201).json(character);
+    res.status(201).json({ success: true, data: character });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -253,21 +246,24 @@ router.put('/characters/:id', (req, res) => {
   try {
     const character = Character.update(req.params.id, req.body);
     if (!character) {
-      return res.status(404).json({ error: '角色不存在' });
+      return res.status(404).json({ success: false, error: '角色不存在' });
     }
-    res.json(character);
+    res.json({ success: true, data: character });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // 删除角色
 router.delete('/characters/:id', (req, res) => {
   try {
-    Character.delete(req.params.id);
-    res.json({ success: true });
+    const result = Character.delete(req.params.id);
+    if (!result) {
+      return res.status(404).json({ success: false, error: '角色不存在' });
+    }
+    res.json({ success: true, message: '角色已删除' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
