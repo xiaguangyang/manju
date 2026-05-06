@@ -115,6 +115,19 @@ router.get('/episodes/:id', (req, res) => {
   }
 });
 
+// 为项目创建剧集
+router.post('/projects/:projectId/episodes', (req, res) => {
+  try {
+    const episode = Episode.create({
+      ...req.body,
+      projectId: req.params.projectId,
+    });
+    res.status(201).json({ success: true, data: episode });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 创建剧集
 router.post('/episodes', (req, res) => {
   try {
