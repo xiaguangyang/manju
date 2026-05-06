@@ -32,6 +32,7 @@ function ensureDataDir() {
 
 // 读取数据
 function readData(type) {
+  ensureDataDir(); // 确保数据目录存在
   ensureDataDir();
   try {
     const data = fs.readFileSync(db[type], 'utf8');

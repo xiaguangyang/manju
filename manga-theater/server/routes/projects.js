@@ -5,6 +5,9 @@ const express = require('express');
 const router = express.Router();
 const { Project, Episode, Scene, Character } = require('../models/Project');
 
+// 初始化数据目录
+Project.init?.() || Episode.init?.() || Scene.init?.();
+
 // ==================== 项目路由 ====================
 
 // 获取所有项目
