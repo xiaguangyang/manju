@@ -66,6 +66,46 @@ router.put('/projects/:id', (req, res) => {
   }
 });
 
+// 更新项目步骤状态
+router.put('/projects/:id/steps/:stepId', (req, res) => {
+  try {
+    const { status, content, ...otherData } = req.body;
+    const project = Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ success: false, error: '项目不存在' });
+    }
+    
+    // 更新步骤数据
+    const stepData = {
+      status: status || 'pending',
+      updatedAt: new Date().toISOString(),
+    };
+    if (content !== undefined) {
+      stepData.content = content;
+    }
+    
+    // 合并其他数据
+    Object.keys(otherData).forEach(key => {
+      if (!project[req.params.stepId]) {
+        project[req.params.stepId] = {};
+      }
+      project[req.params.stepId][key] = otherData[key];
+    });
+    
+    // 更新项目
+    const updatedProject = Project.update(req.params.id, {
+      [req.params.stepId]: {
+        ...(project[req.params.stepId] || {}),
+        ...stepData,
+      }
+    });
+    
+    res.json({ success: true, data: updatedProject });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 删除项目
 router.delete('/projects/:id', (req, res) => {
   try {

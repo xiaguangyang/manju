@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Plus, FolderOpen, Film, Clock, CheckCircle, 
-  PlayCircle, Trash2, Edit3, ChevronRight, Layers
+  PlayCircle, Trash2, Edit3, ChevronRight, Layers,
+  X
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:3001/api';
@@ -19,24 +20,16 @@ const formatDate = (dateString) => {
   });
 };
 
-// 获取状态颜色
-const getStatusColor = (status) => {
-  const colors = {
-    pending: 'text-gray-500 bg-gray-100',
-    in_progress: 'text-blue-600 bg-blue-100',
-    completed: 'text-green-600 bg-green-100',
-  };
-  return colors[status] || colors.pending;
-};
-
-// 获取状态文本
-const getStatusText = (status) => {
+// 获取类型文本
+const getGenreText = (genre) => {
   const texts = {
-    pending: '待处理',
-    in_progress: '进行中',
-    completed: '已完成',
+    romance: '甜宠',
+    fantasy: '奇幻',
+    thriller: '悬疑',
+    scifi: '科幻',
+    other: '其他',
   };
-  return texts[status] || '待处理';
+  return texts[genre] || '其他';
 };
 
 export default function Dashboard() {
@@ -44,6 +37,8 @@ export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
@@ -86,7 +81,6 @@ export default function Dashboard() {
         fetchProjects();
         setShowCreateModal(false);
         setNewProject({ name: '', description: '', genre: 'romance' });
-        // 跳转到新项目
         navigate(`/project/${data.data.id}`);
       }
     } catch (err) {
@@ -94,10 +88,40 @@ export default function Dashboard() {
     }
   };
 
+  // 打开编辑弹窗
+  const handleEditProject = (project, e) => {
+    e?.stopPropagation();
+    setEditingProject({ ...project });
+    setShowEditModal(true);
+  };
+
+  // 保存编辑
+  const handleSaveEdit = async () => {
+    if (!editingProject.name.trim()) {
+      alert('请输入项目名称');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/projects/${editingProject.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingProject),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchProjects();
+        setShowEditModal(false);
+        setEditingProject(null);
+      }
+    } catch (err) {
+      console.error('保存失败:', err);
+    }
+  };
+
   // 删除项目
   const handleDeleteProject = async (id, e) => {
     e.stopPropagation();
-    if (!confirm('确定要删除这个项目吗？')) return;
+    if (!confirm('确定要删除这个项目吗？所有剧集和分镜都会被删除！')) return;
     try {
       const res = await fetch(`${API_BASE}/projects/${id}`, { method: 'DELETE' });
       const data = await res.json();
@@ -114,6 +138,12 @@ export default function Dashboard() {
     const stages = ['script', 'storyboard', 'image', 'video', 'audio', 'export'];
     const completed = stages.filter(s => project[s]?.status === 'completed').length;
     return Math.round((completed / stages.length) * 100);
+  };
+
+  // 获取剧集和分镜总数
+  const getTotalScenes = (project) => {
+    if (!project.episodes) return 0;
+    return project.episodes.reduce((total, ep) => total + (ep.scenes?.length || 0), 0);
   };
 
   return (
@@ -178,26 +208,22 @@ export default function Dashboard() {
                 {/* 类型标签 */}
                 <div className="absolute top-3 left-3">
                   <span className="px-2 py-1 bg-white/90 text-gray-700 text-xs font-medium rounded-full">
-                    {project.genre === 'romance' ? '甜宠' : 
-                     project.genre === 'fantasy' ? '奇幻' :
-                     project.genre === 'thriller' ? '悬疑' :
-                     project.genre === 'scifi' ? '科幻' : '其他'}
+                    {getGenreText(project.genre)}
                   </span>
                 </div>
                 {/* 操作按钮 */}
                 <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/project/${project.id}`);
-                    }}
+                    onClick={(e) => handleEditProject(project, e)}
                     className="p-2 bg-white/90 rounded-lg hover:bg-white"
+                    title="编辑项目"
                   >
                     <Edit3 className="w-4 h-4 text-gray-700" />
                   </button>
                   <button
                     onClick={(e) => handleDeleteProject(project.id, e)}
                     className="p-2 bg-white/90 rounded-lg hover:bg-white"
+                    title="删除项目"
                   >
                     <Trash2 className="w-4 h-4 text-red-500" />
                   </button>
@@ -230,6 +256,8 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1">
                     <Layers className="w-3 h-3" />
                     <span>{project.episodes?.length || 0} 剧集</span>
+                    <span className="mx-1">/</span>
+                    <span>{getTotalScenes(project)} 分镜</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
@@ -257,7 +285,12 @@ export default function Dashboard() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 m-4">
-            <h2 className="text-xl font-bold mb-4">创建新剧目</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">创建新剧目</h2>
+              <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
             
             <div className="space-y-4">
               <div>
@@ -310,6 +343,83 @@ export default function Dashboard() {
                 className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90"
               >
                 创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑项目弹窗 */}
+      {showEditModal && editingProject && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 m-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">编辑剧目</h2>
+              <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">剧目名称 *</label>
+                <input
+                  type="text"
+                  value={editingProject.name}
+                  onChange={(e) => setEditingProject({...editingProject, name: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">剧目类型</label>
+                <select
+                  value={editingProject.genre}
+                  onChange={(e) => setEditingProject({...editingProject, genre: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="romance">甜宠</option>
+                  <option value="fantasy">奇幻</option>
+                  <option value="thriller">悬疑</option>
+                  <option value="scifi">科幻</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">简介</label>
+                <textarea
+                  value={editingProject.description || ''}
+                  onChange={(e) => setEditingProject({...editingProject, description: e.target.value})}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">封面图片URL</label>
+                <input
+                  type="text"
+                  value={editingProject.cover || ''}
+                  onChange={(e) => setEditingProject({...editingProject, cover: e.target.value})}
+                  placeholder="输入封面图片URL（可选）"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90"
+              >
+                保存
               </button>
             </div>
           </div>
