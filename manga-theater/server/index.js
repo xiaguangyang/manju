@@ -10,6 +10,7 @@ const fs = require('fs');
 const materialRoutes = require('./routes/materials');
 const characterRoutes = require('./routes/characters');
 const projectRoutes = require('./routes/projects');
+const comfyuiRoutes = require('./routes/comfyui');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +32,7 @@ if (!fs.existsSync(uploadsDir)) {
 // API 路由
 app.use('/api/materials', materialRoutes);
 app.use('/api/characters', characterRoutes);
+app.use('/api/comfyui', comfyuiRoutes);
 app.use('/api', projectRoutes);
 
 // 健康检查

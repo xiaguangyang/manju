@@ -25,8 +25,14 @@ export default function EpisodeDetail() {
   const [scenes, setScenes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeStep, setActiveStep] = useState(null);
+  const [activeStep, setActiveStep] = useState('script');
   const [editingContent, setEditingContent] = useState({});
+  const [parsingScript, setParsingScript] = useState(false);
+  const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
+  const [scriptResult, setScriptResult] = useState(null); // 解析后的剧本结果
+  const [generatingImages, setGeneratingImages] = useState(false); // 图片生成中
+  const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 }); // 生成进度
+  const [characters, setCharacters] = useState([]); // 角色列表
 
   // 加载数据
   useEffect(() => {
@@ -59,6 +65,11 @@ export default function EpisodeDetail() {
       const scenesRes = await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}/scenes`);
       const scenesData = await scenesRes.json();
       if (scenesData.success) setScenes(scenesData.data || []);
+
+      // 加载角色列表
+      const charsRes = await fetch(`${API_BASE}/characters?projectId=${projectId}`);
+      const charsData = await charsRes.json();
+      if (charsData.success) setCharacters(charsData.data || []);
 
     } catch (err) {
       setError(err.message);
@@ -96,6 +107,188 @@ export default function EpisodeDetail() {
       }
     } catch (err) {
       console.error('保存失败:', err);
+    }
+  };
+
+  // AI 解析剧本 - 提取角色、场景、分场
+  const handleParseScript = async () => {
+    if (!editingContent.script?.trim()) {
+      alert('请先输入剧本内容');
+      return;
+    }
+
+    try {
+      setParsingScript(true);
+      const res = await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}/script/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: editingContent.script })
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        setScriptResult(data.data);
+        // 保存到剧集
+        await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            script: {
+              raw: editingContent.script,
+              parsed: data.data,
+              characters: data.data.characters || [],
+              scenes: data.data.scenes || []
+            },
+            workflow: {
+              ...episode.workflow,
+              script: { status: 'completed', updatedAt: new Date().toISOString() }
+            }
+          })
+        });
+        loadData();
+      } else {
+        alert('解析失败: ' + (data.error || '未知错误'));
+      }
+    } catch (err) {
+      console.error('解析剧本失败:', err);
+      alert('解析剧本失败');
+    } finally {
+      setParsingScript(false);
+    }
+  };
+
+  // AI 生成分镜
+  const handleGenerateStoryboard = async () => {
+    if (!scriptResult && !episode.script?.parsed) {
+      alert('请先解析剧本');
+      return;
+    }
+
+    try {
+      setGeneratingStoryboard(true);
+      const res = await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}/storyboard/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: episode.script,
+          characters: episode.script?.characters || []
+        })
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        // 更新剧集状态
+        await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflow: {
+              ...episode.workflow,
+              storyboard: { status: 'completed', updatedAt: new Date().toISOString() }
+            }
+          })
+        });
+        loadData();
+        setActiveStep(null);
+      } else {
+        alert('生成分镜失败: ' + (data.error || '未知错误'));
+      }
+    } catch (err) {
+      console.error('生成分镜失败:', err);
+      alert('生成分镜失败');
+    } finally {
+      setGeneratingStoryboard(false);
+    }
+  };
+
+  // 批量生成图片
+  const handleGenerateImages = async () => {
+    if (scenes.length === 0) {
+      alert('请先生成分镜');
+      return;
+    }
+
+    try {
+      setGeneratingImages(true);
+      setGenerationProgress({ current: 0, total: scenes.length });
+
+      // 构建角色参考图映射
+      const characterRefs = {};
+      characters.forEach(char => {
+        if (char.referenceImages?.[0]) {
+          characterRefs[char.id] = char.referenceImages[0];
+        }
+      });
+
+      // 调用批量生成 API
+      const res = await fetch(`${API_BASE}/comfyui/generate/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenes: scenes.map(s => ({
+            id: s.id,
+            visualPrompt: s.visualPrompt || s.description,
+            characterIds: s.characterIds,
+            settings: {
+              width: 1024,
+              height: 1024,
+              steps: 25
+            }
+          })),
+          characterRefs
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const { results, errors } = data.data;
+
+        // 更新每个分镜的图片
+        for (const result of results) {
+          if (result.success && result.image?.url) {
+            await fetch(`${API_BASE}/scenes/${result.sceneId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                image: result.image.url,
+                imagePrompt: scenes.find(s => s.id === result.sceneId)?.visualPrompt,
+                status: 'completed'
+              })
+            });
+          }
+          setGenerationProgress(prev => ({ ...prev, current: prev.current + 1 }));
+        }
+
+        // 更新剧集状态
+        await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflow: {
+              ...episode.workflow,
+              image: { status: 'completed', updatedAt: new Date().toISOString() }
+            }
+          })
+        });
+
+        // 重新加载数据
+        loadData();
+        setActiveStep(null);
+
+        // 显示结果
+        if (errors.length > 0) {
+          alert(`生成完成！成功 ${results.length - errors.length} 张，失败 ${errors.length} 张`);
+        } else {
+          alert('所有图片生成成功！');
+        }
+      } else {
+        alert('生成失败: ' + (data.error || '未知错误'));
+      }
+    } catch (err) {
+      console.error('图片生成失败:', err);
+      alert('图片生成失败');
+    } finally {
+      setGeneratingImages(false);
     }
   };
 
@@ -208,26 +401,112 @@ export default function EpisodeDetail() {
                   <div className="px-5 pb-5 pt-0 border-t border-gray-200 mt-2">
                     <div className="pt-4 space-y-4">
                       {step.id === 'script' && (
-                        <>
+                        <div className="space-y-4">
+                          {/* 剧本输入区域 */}
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">剧本内容</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              剧本内容
+                              <span className="text-gray-400 font-normal ml-1">(支持 Markdown)</span>
+                            </label>
                             <textarea
                               value={editingContent.script || ''}
                               onChange={(e) => setEditingContent({...editingContent, script: e.target.value})}
-                              placeholder="输入剧本内容..."
-                              rows={8}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
+                              placeholder={"# 第一幕\n\n## 场景1：咖啡馆\n\n人物：小明、咖啡馆老板\n\n小明走进咖啡馆，点了一杯咖啡...\n\n## 场景2：街道\n\n..."}
+                              rows={10}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm font-mono"
                             />
                           </div>
+
+                          {/* 解析结果预览 */}
+                          {(episode.script?.parsed || scriptResult) && (
+                            <div className="bg-purple-50 rounded-lg p-4 space-y-4">
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-medium text-purple-900">AI 解析结果</h4>
+                                <button
+                                  onClick={() => setScriptResult(null)}
+                                  className="text-purple-600 hover:text-purple-800 text-sm"
+                                >
+                                  重新解析
+                                </button>
+                              </div>
+
+                              {/* 角色列表 */}
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-700 mb-2">识别角色 ({episode.script?.characters?.length || 0})</h5>
+                                <div className="flex flex-wrap gap-2">
+                                  {(episode.script?.characters || scriptResult?.characters || []).map((char, i) => (
+                                    <span key={i} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
+                                      {char.name}
+                                    </span>
+                                  ))}
+                                  {(episode.script?.characters?.length === 0 || !episode.script?.characters) && (
+                                    <span className="text-gray-400 text-sm">未识别到角色</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* 场景列表 */}
+                              <div>
+                                <h5 className="text-sm font-medium text-gray-700 mb-2">分场预览 ({episode.script?.scenes?.length || 0})</h5>
+                                <div className="space-y-2 max-h-40 overflow-y-auto">
+                                  {(episode.script?.scenes || scriptResult?.scenes || []).map((scene, i) => (
+                                    <div key={i} className="bg-white rounded p-2 text-sm">
+                                      <span className="font-medium text-purple-600">{scene.name}</span>
+                                      <span className="text-gray-500 ml-2">{scene.description}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 操作按钮 */}
                           <div className="flex gap-2">
                             <button
-                              onClick={() => handleSaveStep('script')}
-                              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+                              onClick={handleParseScript}
+                              disabled={parsingScript || !editingContent.script?.trim()}
+                              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                              保存剧本
+                              {parsingScript ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                  AI 解析中...
+                                </>
+                              ) : (
+                                'AI 解析剧本'
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setEditingContent({...editingContent, script: episode.script?.raw || editingContent.script})}
+                              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+                            >
+                              加载已保存
                             </button>
                           </div>
-                        </>
+
+                          {/* 确认后进入分镜 */}
+                          {episode.script?.parsed && scenes.length === 0 && (
+                            <div className="pt-2 border-t border-gray-200">
+                              <button
+                                onClick={handleGenerateStoryboard}
+                                disabled={generatingStoryboard}
+                                className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                              >
+                                {generatingStoryboard ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                    AI 生成分镜中...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Film className="w-4 h-4" />
+                                    AI 生成分镜
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
 
                       {step.id === 'storyboard' && (
@@ -253,17 +532,70 @@ export default function EpisodeDetail() {
                       )}
 
                       {step.id === 'imageGeneration' && (
-                        <div className="space-y-3">
-                          <p className="text-sm text-gray-600">
-                            {scenes.length > 0 ? `已生成 ${scenes.filter(s => s.image).length}/${scenes.length} 张图片` : '请先完成分镜设计'}
-                          </p>
+                        <div className="space-y-4">
+                          {/* 生成状态 */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">生成进度</span>
+                              <span className="font-medium">
+                                {generatingImages 
+                                  ? `${generationProgress.current}/${generationProgress.total}`
+                                  : `${scenes.filter(s => s.image).length}/${scenes.length} 张`
+                                }
+                              </span>
+                            </div>
+                            {generatingImages && (
+                              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all"
+                                  style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 角色参考图状态 */}
+                          {characters.length > 0 && (
+                            <div className="bg-blue-50 rounded-lg p-3">
+                              <p className="text-sm text-blue-800">
+                                <span className="font-medium">{characters.length}</span> 个角色已配置
+                                <span className="text-blue-600 ml-2">
+                                  ({characters.filter(c => c.referenceImages?.length > 0).length} 个有参考图)
+                                </span>
+                              </p>
+                              {characters.filter(c => !c.referenceImages?.length).length > 0 && (
+                                <p className="text-xs text-blue-600 mt-1">
+                                  建议为角色添加参考图以保持画面一致性
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 生成按钮 */}
                           <button
-                            onClick={() => handleSaveStep('imageGeneration')}
-                            disabled={scenes.length === 0}
-                            className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+                            onClick={handleGenerateImages}
+                            disabled={scenes.length === 0 || generatingImages}
+                            className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            开始生成
+                            {generatingImages ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                生成中 {generationProgress.current}/{generationProgress.total}...
+                              </>
+                            ) : (
+                              <>
+                                <Image className="w-4 h-4" />
+                                批量生成图片
+                              </>
+                            )}
                           </button>
+
+                          {/* 提示信息 */}
+                          {scenes.length === 0 && (
+                            <p className="text-sm text-gray-500 text-center">
+                              请先在剧本创作中完成分镜生成
+                            </p>
+                          )}
                         </div>
                       )}
 

@@ -150,7 +150,26 @@ const Episode = {
       title: data.title || '新剧集',
       episodeNumber: data.episodeNumber || 1,
       description: data.description || '',
-      status: 'draft', // draft, generating, completed
+      status: 'draft', // draft, script_ready, storyboard_ready, generating, completed
+
+      // 剧本相关
+      script: {
+        raw: data.script?.raw || '', // 用户原始输入
+        parsed: data.script?.parsed || null, // AI 解析后的结构化剧本
+        characters: data.script?.characters || [], // 从剧本提取的角色列表
+        scenes: data.script?.scenes || [], // 分场信息
+      },
+
+      // 工作流状态
+      workflow: {
+        script: { status: 'pending', updatedAt: null },
+        storyboard: { status: 'pending', updatedAt: null },
+        image: { status: 'pending', updatedAt: null },
+        video: { status: 'pending', updatedAt: null },
+        audio: { status: 'pending', updatedAt: null },
+        export: { status: 'pending', updatedAt: null },
+      },
+
       totalDuration: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -226,17 +245,31 @@ const Scene = {
       dialogue: data.dialogue || '',
       narration: data.narration || '',
 
-      // 画面描述
+      // 画面描述（AI 生成）
       description: data.description || '',
+      visualPrompt: data.visualPrompt || '', // 给图片生成的完整提示词
       camera: data.camera || '中景', // 近景, 中景, 远景, 特写
       cameraMovement: data.cameraMovement || '固定', // 固定, 推, 拉, 摇, 移
+      shotAngle: data.shotAngle || '平视', // 平视, 俯视, 仰视
 
-      // 角色
-      characters: data.characters || [],
+      // 角色关联
+      characterIds: data.characterIds || [], // 涉及的角色 ID 列表
+      characters: data.characters || [], // 内嵌的角色信息快照
 
       // 场景
       location: data.location || '',
       timeOfDay: data.timeOfDay || '白天', // 白天, 夜晚, 黎明, 黄昏
+      weather: data.weather || '晴', // 晴, 雨, 雪, 雾
+
+      // 视频生成
+      videoPrompt: data.videoPrompt || '', // 给视频生成的提示词
+      motionIntensity: data.motionIntensity || 0.5, // 0-1, 运动强度
+
+      // 音频
+      audioPrompt: data.audioPrompt || '', // 音效描述
+      dialogueAudio: null, // 生成的对话音频
+      sfxAudio: null, // 生成的音效
+      bgmTrack: null, // BGM 轨道
 
       // BGM/音效
       bgm: data.bgm || '',
@@ -246,11 +279,14 @@ const Scene = {
       image: data.image || null,
       imagePrompt: data.imagePrompt || '',
       video: data.video || null,
+      videoUrl: data.videoUrl || null, // 生成的视频 URL
       audio: data.audio || null,
 
       // 状态
       status: 'pending', // pending, generating, completed, failed
-      duration: data.duration || 3,
+      generationLog: [], // 生成日志
+      duration: data.duration || 3, // 预计时长（秒）
+      actualDuration: null, // 实际生成后的时长
 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -272,19 +308,32 @@ const Scene = {
       dialogue: data.dialogue || '',
       narration: data.narration || '',
       description: data.description || '',
+      visualPrompt: data.visualPrompt || '',
       camera: data.camera || '中景',
       cameraMovement: data.cameraMovement || '固定',
+      shotAngle: data.shotAngle || '平视',
+      characterIds: data.characterIds || [],
       characters: data.characters || [],
       location: data.location || '',
       timeOfDay: data.timeOfDay || '白天',
+      weather: data.weather || '晴',
+      videoPrompt: data.videoPrompt || '',
+      motionIntensity: data.motionIntensity || 0.5,
+      audioPrompt: data.audioPrompt || '',
+      dialogueAudio: null,
+      sfxAudio: null,
+      bgmTrack: null,
       bgm: data.bgm || '',
       soundEffect: data.soundEffect || '',
       image: null,
-      imagePrompt: '',
+      imagePrompt: data.imagePrompt || '',
       video: null,
+      videoUrl: null,
       audio: null,
       status: 'pending',
+      generationLog: [],
       duration: data.duration || 3,
+      actualDuration: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }));
@@ -356,10 +405,17 @@ const Character = {
       projectId: data.projectId || null, // null表示全局角色库
       name: data.name || '新角色',
       description: data.description || '',
-      referenceImages: data.referenceImages || [],
-      traits: data.traits || [], // 特征词
-      voice: data.voice || '',
-      colorPalette: data.colorPalette || [],
+      personality: data.personality || '', // AI 角色性格描述
+      referenceImages: data.referenceImages || [], // 参考图 URL 列表
+      ipAdapterData: data.ipAdapterData || null, // IP-Adapter 特征数据
+      traits: data.traits || [], // 特征词：["活泼", "开朗"]
+      colorPalette: data.colorPalette || [], // 角色主色调
+      preferredVoice: data.preferredVoice || '', // 偏好音色 ID
+      voiceSettings: data.voiceSettings || { // 音色设置
+        speed: 1.0,
+        pitch: 0,
+        volume: 1.0,
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
