@@ -8,6 +8,17 @@ import {
 
 const API_BASE = 'http://localhost:3001/api';
 
+// 创作流程步骤
+const WORKFLOW_STEPS = [
+  { id: 'script', title: '剧本创作', icon: FileText, description: '编写剧本内容，管理对话和旁白' },
+  { id: 'storyboard', title: '分镜设计', icon: Layout, description: '创建和管理分镜，设置镜头参数' },
+  { id: 'image', title: '图片生成', icon: Image, description: 'AI生成分镜图片' },
+  { id: 'video', title: '视频生成', icon: Video, description: '图生视频，转场效果' },
+  { id: 'audio', title: '配音合成', icon: Volume2, description: '角色配音，BGM背景音乐' },
+  { id: 'export', title: '预览导出', icon: Download, description: '最终预览，导出视频' },
+];
+
+
 
 // 获取状态信息
 const getStatusInfo = (status) => {
