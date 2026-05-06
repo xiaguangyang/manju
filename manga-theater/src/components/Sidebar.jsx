@@ -1,154 +1,100 @@
-import { NavLink, useLocation } from 'react-router-dom'
-import { useProjectStore } from '../store'
-import {
-  Home,
-  FileText,
-  Layout,
-  Image,
-  Video,
-  Mic,
-  Download,
-  Sparkles,
-  FolderOpen,
-  Folder,
-  Users,
-} from 'lucide-react'
+import { NavLink, useNavigate } from 'react-router-dom';
+import { 
+  Home, FolderOpen, Image, Layers, Palette, 
+  Settings, ChevronDown, Plus, Film
+} from 'lucide-react';
+import { useState } from 'react';
 
-const iconMap = {
-  FileText,
-  Layout,
-  Image,
-  Video,
-  Mic,
-  Download,
-}
+export default function Sidebar() {
+  const navigate = useNavigate();
+  const [showProjects, setShowProjects] = useState(false);
+  const [projects, setProjects] = useState([]);
 
-export default function Sidebar({ steps, currentStep }) {
+  // 获取项目列表
+  useState(() => {
+    fetch('http://localhost:3001/api/projects')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setProjects(data.data || []);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const navItems = [
+    { path: '/', icon: Home, label: '首页', exact: true },
+    { path: '/materials', icon: Palette, label: '素材库' },
+  ];
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col z-50">
+    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl gradient-manga flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="font-display font-bold text-lg text-gray-900">漫剧工坊</h1>
-            <p className="text-xs text-gray-500">AI漫剧创作平台</p>
-          </div>
+      <div className="h-16 flex items-center px-4 border-b border-gray-100">
+        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+          <Film className="w-5 h-5 text-white" />
         </div>
+        <span className="ml-3 font-bold text-gray-900">漫剧工坊</span>
       </div>
 
-      {/* 导航链接 */}
-      <nav className="flex-1 py-6 px-4 space-y-1">
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              isActive
-                ? 'bg-indigo-50 text-indigo-600'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`
-          }
-        >
-          <Home className="w-5 h-5" />
-          <span className="font-medium">首页概览</span>
-        </NavLink>
+      {/* 导航 */}
+      <nav className="flex-1 p-3 space-y-1">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            end={item.exact}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-purple-50 text-purple-600'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`
+            }
+          >
+            <item.icon className="w-5 h-5" />
+            <span className="font-medium">{item.label}</span>
+          </NavLink>
+        ))}
 
-        <div className="pt-4 pb-2">
-          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            创作流程
-          </p>
+        {/* 项目下拉 */}
+        <div>
+          <button
+            onClick={() => setShowProjects(!showProjects)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <FolderOpen className="w-5 h-5" />
+            <span className="font-medium flex-1 text-left">剧目</span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${showProjects ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {showProjects && (
+            <div className="ml-4 mt-1 space-y-1">
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => navigate(`/project/${project.id}`)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-purple-50 hover:text-purple-600 transition-colors"
+                >
+                  <Layers className="w-4 h-4" />
+                  <span className="truncate">{project.name}</span>
+                </button>
+              ))}
+              {projects.length === 0 && (
+                <p className="px-3 py-2 text-sm text-gray-400">暂无剧目</p>
+              )}
+            </div>
+          )}
         </div>
-
-        {steps.map((step, index) => {
-          const Icon = iconMap[step.icon] || FileText
-          const isActive = index === currentStep
-          const isPast = index < currentStep
-          const isClickable = index <= currentStep || index === currentStep + 1
-
-          return (
-            <NavLink
-              key={step.id}
-              to={`/${step.id === 'script' ? 'script' : step.id}`}
-              className={`
-                flex items-center gap-3 px-4 py-3 rounded-xl transition-all
-                ${isClickable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}
-                ${isActive
-                  ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30'
-                  : isPast
-                    ? 'bg-green-50 text-green-600'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }
-              `}
-            >
-              <div className={`
-                w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold
-                ${isActive
-                  ? 'bg-white/20 text-white'
-                  : isPast
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-200 text-gray-500'
-                }
-              `}>
-                {isPast ? '✓' : index + 1}
-              </div>
-              <span className="font-medium">{step.name}</span>
-            </NavLink>
-          )
-        })}
-
-        <div className="pt-4 pb-2">
-          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            项目管理
-          </p>
-        </div>
-
-        <NavLink
-          to="/projects"
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              isActive
-                ? 'bg-indigo-50 text-indigo-600'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`
-          }
-        >
-          <Folder className="w-5 h-5" />
-          <span className="font-medium">剧目管理</span>
-        </NavLink>
-
-        <div className="pt-4 pb-2">
-          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            资源管理
-          </p>
-        </div>
-
-        <NavLink
-          to="/materials"
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              isActive
-                ? 'bg-indigo-50 text-indigo-600'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`
-          }
-        >
-          <FolderOpen className="w-5 h-5" />
-          <span className="font-medium">素材库</span>
-        </NavLink>
       </nav>
 
-      {/* 底部信息 */}
-      <div className="p-4 border-t border-gray-100">
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl p-4 text-white">
-          <p className="text-sm font-medium mb-1">创作提示</p>
-          <p className="text-xs text-white/80">
-            使用结构化的剧本格式可以大幅提升生成效率
-          </p>
-        </div>
+      {/* 底部设置 */}
+      <div className="p-3 border-t border-gray-100">
+        <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+          <Settings className="w-5 h-5" />
+          <span className="font-medium">设置</span>
+        </button>
       </div>
     </aside>
-  )
+  );
 }

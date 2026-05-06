@@ -1,273 +1,320 @@
-import { useNavigate } from 'react-router-dom'
-import { useProjectStore } from '../store'
-import {
-  FileText,
-  Layout,
-  Image,
-  Video,
-  Mic,
-  Download,
-  Play,
-  Clock,
-  TrendingUp,
-  Sparkles,
-  ArrowRight,
-  Zap,
-} from 'lucide-react'
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { 
+  Plus, FolderOpen, Film, Clock, CheckCircle, 
+  PlayCircle, Trash2, Edit3, ChevronRight, Layers
+} from 'lucide-react';
+
+const API_BASE = 'http://localhost:3001/api';
+
+// 格式化日期
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('zh-CN', { 
+    month: 'short', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// 获取状态颜色
+const getStatusColor = (status) => {
+  const colors = {
+    pending: 'text-gray-500 bg-gray-100',
+    in_progress: 'text-blue-600 bg-blue-100',
+    completed: 'text-green-600 bg-green-100',
+  };
+  return colors[status] || colors.pending;
+};
+
+// 获取状态文本
+const getStatusText = (status) => {
+  const texts = {
+    pending: '待处理',
+    in_progress: '进行中',
+    completed: '已完成',
+  };
+  return texts[status] || '待处理';
+};
 
 export default function Dashboard() {
-  const navigate = useNavigate()
-  const { steps, scenes, images, audio, currentStep, resetProject } = useProjectStore()
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newProject, setNewProject] = useState({
+    name: '',
+    description: '',
+    genre: 'romance',
+  });
 
-  // 统计数据
-  const stats = [
-    {
-      label: '分镜数量',
-      value: scenes.length,
-      icon: Layout,
-      color: 'from-blue-500 to-cyan-500',
-      bgColor: 'bg-blue-50',
-      iconColor: 'text-blue-500',
-    },
-    {
-      label: '生成图片',
-      value: images.length,
-      icon: Image,
-      color: 'from-purple-500 to-pink-500',
-      bgColor: 'bg-purple-50',
-      iconColor: 'text-purple-500',
-    },
-    {
-      label: '配音片段',
-      value: audio.length,
-      icon: Mic,
-      color: 'from-orange-500 to-red-500',
-      bgColor: 'bg-orange-50',
-      iconColor: 'text-orange-500',
-    },
-    {
-      label: '完成进度',
-      value: `${Math.round((currentStep / 5) * 100)}%`,
-      icon: TrendingUp,
-      color: 'from-green-500 to-emerald-500',
-      bgColor: 'bg-green-50',
-      iconColor: 'text-green-500',
-    },
-  ]
+  // 获取项目列表
+  useEffect(() => {
+    fetchProjects();
+  }, []);
 
-  // 快捷操作
-  const quickActions = [
-    {
-      title: '新建剧本',
-      description: '开始创作新的漫剧剧本',
-      icon: FileText,
-      path: '/script',
-      color: 'from-indigo-500 to-purple-500',
-    },
-    {
-      title: '设计分镜',
-      description: '创建和管理漫剧分镜',
-      icon: Layout,
-      path: '/storyboard',
-      color: 'from-cyan-500 to-blue-500',
-    },
-    {
-      title: '生成图片',
-      description: 'AI生成漫剧图片',
-      icon: Image,
-      path: '/images',
-      color: 'from-pink-500 to-rose-500',
-    },
-    {
-      title: '生成视频',
-      description: '图生视频制作',
-      icon: Video,
-      path: '/video',
-      color: 'from-amber-500 to-orange-500',
-    },
-  ]
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/projects`);
+      const data = await res.json();
+      if (data.success) {
+        setProjects(data.data || []);
+      }
+    } catch (err) {
+      console.error('获取项目失败:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 创建项目
+  const handleCreateProject = async () => {
+    if (!newProject.name.trim()) {
+      alert('请输入项目名称');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProject),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchProjects();
+        setShowCreateModal(false);
+        setNewProject({ name: '', description: '', genre: 'romance' });
+        // 跳转到新项目
+        navigate(`/project/${data.data.id}`);
+      }
+    } catch (err) {
+      console.error('创建项目失败:', err);
+    }
+  };
+
+  // 删除项目
+  const handleDeleteProject = async (id, e) => {
+    e.stopPropagation();
+    if (!confirm('确定要删除这个项目吗？')) return;
+    try {
+      const res = await fetch(`${API_BASE}/projects/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        fetchProjects();
+      }
+    } catch (err) {
+      console.error('删除失败:', err);
+    }
+  };
+
+  // 统计项目进度
+  const getProjectProgress = (project) => {
+    const stages = ['script', 'storyboard', 'image', 'video', 'audio', 'export'];
+    const completed = stages.filter(s => project[s]?.status === 'completed').length;
+    return Math.round((completed / stages.length) * 100);
+  };
 
   return (
-    <div className="space-y-8">
-      {/* 顶部欢迎区 */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 p-8 text-white">
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-5 h-5" />
-            <span className="text-sm font-medium text-white/80">AI漫剧创作平台</span>
+    <div className="p-6">
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">我的剧目</h1>
+          <p className="text-gray-500 mt-1">管理你的漫剧创作项目</p>
+        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+        >
+          <Plus className="w-5 h-5" />
+          新建剧目
+        </button>
+      </div>
+
+      {/* 加载状态 */}
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
+        </div>
+      ) : projects.length === 0 ? (
+        /* 空状态 - 引导创建 */
+        <div className="flex flex-col items-center justify-center h-96 border-2 border-dashed border-gray-300 rounded-2xl">
+          <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center mb-6">
+            <Film className="w-10 h-10 text-purple-600" />
           </div>
-          <h1 className="text-3xl font-display font-bold mb-2">
-            欢迎来到漫剧工坊
-          </h1>
-          <p className="text-white/80 mb-6 max-w-xl">
-            从剧本到视频，一站式AI漫剧创作。跟随创作流程，完成你的第一部AI漫剧作品。
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">开始你的第一个漫剧</h2>
+          <p className="text-gray-500 mb-6 text-center max-w-md">
+            创建剧目，编写剧本，生成图片和视频<br />
+            轻松制作你的AI漫剧作品
           </p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => navigate('/script')}
-              className="px-6 py-3 bg-white text-indigo-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2"
-            >
-              <Zap className="w-4 h-4" />
-              开始创作
-            </button>
-            <button
-              onClick={resetProject}
-              className="px-6 py-3 bg-white/20 text-white font-medium rounded-xl hover:bg-white/30 transition-all"
-            >
-              重置项目
-            </button>
-          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:opacity-90 transition-opacity shadow-lg"
+          >
+            <Plus className="w-5 h-5" />
+            创建第一个剧目
+          </button>
         </div>
-
-        {/* 装饰元素 */}
-        <div className="absolute -right-20 -top-20 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
-        <div className="absolute -right-10 bottom-0 w-60 h-60 bg-purple-500/30 rounded-full blur-2xl" />
-
-        {/* 动画装饰 */}
-        <div className="absolute right-20 top-10 animate-float">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl backdrop-blur-sm flex items-center justify-center">
-            <Video className="w-8 h-8" />
-          </div>
-        </div>
-      </div>
-
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon
-          return (
+      ) : (
+        /* 项目列表 */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projects.map((project) => (
             <div
-              key={index}
-              className="panel p-6 card-hover"
+              key={project.id}
+              onClick={() => navigate(`/project/${project.id}`)}
+              className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">{stat.label}</p>
-                  <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-                <div className={`w-12 h-12 rounded-xl ${stat.bgColor} flex items-center justify-center`}>
-                  <Icon className={`w-6 h-6 ${stat.iconColor}`} />
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* 创作流程进度 */}
-      <div className="panel p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-6">创作流程</h3>
-        <div className="flex items-center justify-between">
-          {steps.map((step, index) => {
-            const Icon = {
-              FileText,
-              Layout,
-              Image,
-              Video,
-              Mic,
-              Download,
-            }[step.icon] || FileText
-
-            const isCompleted = index < currentStep
-            const isCurrent = index === currentStep
-            const isPending = index > currentStep
-
-            return (
-              <div key={step.id} className="flex items-center">
-                <button
-                  onClick={() => navigate(`/${step.id === 'script' ? 'script' : step.id}`)}
-                  className={`
-                    flex flex-col items-center gap-3 p-4 rounded-2xl transition-all
-                    ${isCurrent
-                      ? 'bg-indigo-50 ring-2 ring-indigo-500'
-                      : isCompleted
-                        ? 'bg-green-50 hover:bg-green-100'
-                        : 'bg-gray-50 hover:bg-gray-100 opacity-60'
-                    }
-                  `}
-                >
-                  <div className={`
-                    w-12 h-12 rounded-xl flex items-center justify-center
-                    ${isCurrent
-                      ? 'bg-indigo-500 text-white'
-                      : isCompleted
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-200 text-gray-500'
-                    }
-                  `}>
-                    {isCompleted ? (
-                      <span className="text-lg">✓</span>
-                    ) : (
-                      <Icon className="w-6 h-6" />
-                    )}
+              {/* 项目封面 */}
+              <div className="h-40 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 relative overflow-hidden">
+                {project.cover ? (
+                  <img src={project.cover} alt={project.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Film className="w-16 h-16 text-white/50" />
                   </div>
-                  <span className={`
-                    text-sm font-medium
-                    ${isCurrent ? 'text-indigo-600' : isCompleted ? 'text-green-600' : 'text-gray-500'}
-                  `}>
-                    {step.name}
-                  </span>
-                </button>
-
-                {index < steps.length - 1 && (
-                  <div className={`
-                    w-16 h-0.5 mx-2
-                    ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}
-                  `} />
                 )}
+                {/* 类型标签 */}
+                <div className="absolute top-3 left-3">
+                  <span className="px-2 py-1 bg-white/90 text-gray-700 text-xs font-medium rounded-full">
+                    {project.genre === 'romance' ? '甜宠' : 
+                     project.genre === 'fantasy' ? '奇幻' :
+                     project.genre === 'thriller' ? '悬疑' :
+                     project.genre === 'scifi' ? '科幻' : '其他'}
+                  </span>
+                </div>
+                {/* 操作按钮 */}
+                <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/project/${project.id}`);
+                    }}
+                    className="p-2 bg-white/90 rounded-lg hover:bg-white"
+                  >
+                    <Edit3 className="w-4 h-4 text-gray-700" />
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteProject(project.id, e)}
+                    className="p-2 bg-white/90 rounded-lg hover:bg-white"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
+                </div>
               </div>
-            )
-          })}
-        </div>
-      </div>
 
-      {/* 快捷操作 */}
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-6">快捷操作</h3>
-        <div className="grid grid-cols-4 gap-6">
-          {quickActions.map((action, index) => {
-            const Icon = action.icon
-            return (
-              <button
-                key={index}
-                onClick={() => navigate(action.path)}
-                className="panel p-6 card-hover text-left group"
-              >
-                <div className={`
-                  w-12 h-12 rounded-xl bg-gradient-to-br ${action.color}
-                  flex items-center justify-center mb-4
-                  transform group-hover:scale-110 transition-transform
-                `}>
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-                <h4 className="font-semibold text-gray-900 mb-1">{action.title}</h4>
-                <p className="text-sm text-gray-500">{action.description}</p>
-                <div className="mt-4 flex items-center text-indigo-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                  前往 <ArrowRight className="w-4 h-4 ml-1" />
-                </div>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+              {/* 项目信息 */}
+              <div className="p-4">
+                <h3 className="font-semibold text-gray-900 mb-1 truncate">{project.name}</h3>
+                <p className="text-sm text-gray-500 mb-3 line-clamp-2">
+                  {project.description || '暂无描述'}
+                </p>
 
-      {/* 技巧提示 */}
-      <div className="panel p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-            <Clock className="w-5 h-5 text-amber-500" />
+                {/* 进度条 */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-500">创作进度</span>
+                    <span className="font-medium text-purple-600">{getProjectProgress(project)}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all"
+                      style={{ width: `${getProjectProgress(project)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 统计信息 */}
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <div className="flex items-center gap-1">
+                    <Layers className="w-3 h-3" />
+                    <span>{project.episodes?.length || 0} 剧集</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    <span>{formatDate(project.updatedAt)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* 添加新项目卡片 */}
+          <div
+            onClick={() => setShowCreateModal(true)}
+            className="h-80 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-purple-400 hover:bg-purple-50/50 transition-all"
+          >
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <Plus className="w-8 h-8 text-gray-400" />
+            </div>
+            <span className="text-gray-500 font-medium">创建新剧目</span>
           </div>
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-2">创作建议</h4>
-            <div className="space-y-2 text-sm text-gray-600">
-              <p>• 使用清晰的故事大纲可以帮助AI更好地理解你的创作意图</p>
-              <p>• 每个分镜控制在3-5秒的视频时长效果最佳</p>
-              <p>• 角色描述越详细，生成的图片一致性越高</p>
-              <p>• 记得为对话选择合适的配音音色</p>
+        </div>
+      )}
+
+      {/* 创建项目弹窗 */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 m-4">
+            <h2 className="text-xl font-bold mb-4">创建新剧目</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">剧目名称 *</label>
+                <input
+                  type="text"
+                  value={newProject.name}
+                  onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+                  placeholder="例如：霸道总裁爱上我"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">剧目类型</label>
+                <select
+                  value={newProject.genre}
+                  onChange={(e) => setNewProject({...newProject, genre: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="romance">甜宠</option>
+                  <option value="fantasy">奇幻</option>
+                  <option value="thriller">悬疑</option>
+                  <option value="scifi">科幻</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">简介</label>
+                <textarea
+                  value={newProject.description}
+                  onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+                  placeholder="简单描述你的剧目..."
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateProject}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90"
+              >
+                创建
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
-  )
+  );
 }
