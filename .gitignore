@@ -1,8 +1,12 @@
-# 1. 忽略当前目录下的所有文件和文件夹
-/*
+# 忽略 node_modules 等敏感/大文件目录
+node_modules/
+dist/
+.npm/
+.pnpm-store/
 
-# 2. 只追踪配置文件、coze文件
-!/openclaw.json
-!/scripts
-!/.coze
-!/.gitignore
+# 忽略日志和临时文件
+*.log
+*.tmp
+
+# 追踪特定项目目录（漫剧工坊）
+!manga-theater/
