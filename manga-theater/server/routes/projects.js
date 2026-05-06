@@ -158,6 +158,31 @@ router.get('/episodes/:id', (req, res) => {
   }
 });
 
+// 获取单个剧集（带 projectId 前缀的路由）
+router.get('/projects/:projectId/episodes/:id', (req, res) => {
+  try {
+    const episode = Episode.findById(req.params.id);
+    if (!episode) {
+      return res.status(404).json({ success: false, error: '剧集不存在' });
+    }
+    // 附加分镜列表
+    const scenes = Scene.findByEpisode(episode.id);
+    res.json({ success: true, data: { ...episode, scenes } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 获取剧集的所有分镜（带 projectId 前缀）
+router.get('/projects/:projectId/episodes/:episodeId/scenes', (req, res) => {
+  try {
+    const scenes = Scene.findByEpisode(req.params.episodeId);
+    res.json({ success: true, data: scenes });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 为项目创建剧集
 router.post('/projects/:projectId/episodes', (req, res) => {
   try {
@@ -166,6 +191,59 @@ router.post('/projects/:projectId/episodes', (req, res) => {
       projectId: req.params.projectId,
     });
     res.status(201).json({ success: true, data: episode });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 删除剧集（带 projectId 前缀）
+router.delete('/projects/:projectId/episodes/:id', (req, res) => {
+  try {
+    const result = Episode.delete(req.params.id);
+    if (!result) {
+      return res.status(404).json({ success: false, error: '剧集不存在' });
+    }
+    res.json({ success: true, message: '剧集已删除' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 更新剧集步骤状态
+router.put('/projects/:projectId/episodes/:episodeId/steps/:stepId', (req, res) => {
+  try {
+    const { status, content, ...otherData } = req.body;
+    const episode = Episode.findById(req.params.episodeId);
+    if (!episode) {
+      return res.status(404).json({ success: false, error: '剧集不存在' });
+    }
+    
+    // 更新步骤数据
+    const stepData = {
+      status: status || 'pending',
+      updatedAt: new Date().toISOString(),
+    };
+    if (content !== undefined) {
+      stepData.content = content;
+    }
+    
+    // 合并其他数据
+    Object.keys(otherData).forEach(key => {
+      if (!episode[req.params.stepId]) {
+        episode[req.params.stepId] = {};
+      }
+      episode[req.params.stepId][key] = otherData[key];
+    });
+    
+    // 更新剧集
+    const updatedEpisode = Episode.update(req.params.episodeId, {
+      [req.params.stepId]: {
+        ...(episode[req.params.stepId] || {}),
+        ...stepData,
+      }
+    });
+    
+    res.json({ success: true, data: updatedEpisode });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

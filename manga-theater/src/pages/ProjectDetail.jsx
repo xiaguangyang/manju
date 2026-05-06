@@ -282,22 +282,20 @@ export default function ProjectDetail() {
         )}
       </div>
 
-      {/* 创建/编辑剧集模态框 */}
+      {/* 创建剧集模态框 */}
       {showEpisodeModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold mb-4">
-              {editingEpisode ? '编辑剧集' : '创建新剧集'}
-            </h3>
-            <form onSubmit={handleSubmitEpisode} className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">创建新剧集</h3>
+            <form onSubmit={(e) => { e.preventDefault(); handleCreateEpisode(); }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   剧集名称 *
                 </label>
                 <input
                   type="text"
-                  value={episodeForm.title}
-                  onChange={(e) => setEpisodeForm({ ...episodeForm, title: e.target.value })}
+                  value={newEpisode.title}
+                  onChange={(e) => setNewEpisode({ ...newEpisode, title: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="例如：第1集 初遇"
                   required
@@ -308,8 +306,8 @@ export default function ProjectDetail() {
                   剧集描述
                 </label>
                 <textarea
-                  value={episodeForm.description || ''}
-                  onChange={(e) => setEpisodeForm({ ...episodeForm, description: e.target.value })}
+                  value={newEpisode.description || ''}
+                  onChange={(e) => setNewEpisode({ ...newEpisode, description: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                   rows={3}
                   placeholder="描述本集内容..."
@@ -320,8 +318,7 @@ export default function ProjectDetail() {
                   type="button"
                   onClick={() => {
                     setShowEpisodeModal(false);
-                    setEditingEpisode(null);
-                    setEpisodeForm({ title: '' });
+                    setNewEpisode({ title: '', description: '', episodeNumber: 1 });
                   }}
                   className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                 >
@@ -331,7 +328,7 @@ export default function ProjectDetail() {
                   type="submit"
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                 >
-                  {editingEpisode ? '保存' : '创建'}
+                  创建
                 </button>
               </div>
             </form>
