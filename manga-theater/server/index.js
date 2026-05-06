@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import materialRoutes from './routes/materials.js';
 import characterRoutes from './routes/characters.js';
+import projectRoutes from './routes/projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // API 路由
 app.use('/api/materials', materialRoutes);
 app.use('/api/characters', characterRoutes);
+app.use('/api', projectRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

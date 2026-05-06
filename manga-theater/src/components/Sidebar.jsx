@@ -10,6 +10,8 @@ import {
   Download,
   Sparkles,
   FolderOpen,
+  Folder,
+  Users,
 } from 'lucide-react'
 
 const iconMap = {
@@ -96,6 +98,26 @@ export default function Sidebar({ steps, currentStep }) {
             </NavLink>
           )
         })}
+
+        <div className="pt-4 pb-2">
+          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            项目管理
+          </p>
+        </div>
+
+        <NavLink
+          to="/projects"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+              isActive
+                ? 'bg-indigo-50 text-indigo-600'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`
+          }
+        >
+          <Folder className="w-5 h-5" />
+          <span className="font-medium">剧目管理</span>
+        </NavLink>
 
         <div className="pt-4 pb-2">
           <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">

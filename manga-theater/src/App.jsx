@@ -8,6 +8,8 @@ import VideoGenerator from './pages/VideoGenerator'
 import AudioMixer from './pages/AudioMixer'
 import PreviewExport from './pages/PreviewExport'
 import MaterialLibrary from './pages/MaterialLibrary'
+import ProjectManagement from './pages/ProjectManagement'
+import EpisodeManagement from './pages/EpisodeManagement'
 
 function App() {
   return (
@@ -15,6 +17,8 @@ function App() {
       <Routes>
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="projects" element={<ProjectManagement />} />
+          <Route path="projects/:projectId/episodes" element={<EpisodeManagement />} />
           <Route path="script" element={<ScriptEditor />} />
           <Route path="storyboard" element={<Storyboard />} />
           <Route path="images" element={<ImageGenerator />} />
