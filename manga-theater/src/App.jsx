@@ -7,6 +7,7 @@ import ImageGenerator from './pages/ImageGenerator'
 import VideoGenerator from './pages/VideoGenerator'
 import AudioMixer from './pages/AudioMixer'
 import PreviewExport from './pages/PreviewExport'
+import MaterialLibrary from './pages/MaterialLibrary'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="video" element={<VideoGenerator />} />
           <Route path="audio" element={<AudioMixer />} />
           <Route path="preview" element={<PreviewExport />} />
+          <Route path="materials" element={<MaterialLibrary />} />
         </Route>
       </Routes>
     </BrowserRouter>
