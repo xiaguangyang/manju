@@ -1,7 +1,7 @@
 {
   "agent:main:main": {
     "sessionId": "29c5470a-72eb-4528-8c11-8946fc6881d0",
-    "updatedAt": 1777691647941,
+    "updatedAt": 1778047231210,
     "systemSent": true,
     "abortedLastRun": false,
     "chatType": "direct",
@@ -415,9 +415,6 @@
       ],
       "version": 0
     },
-    "modelProvider": "coze",
-    "model": "auto",
-    "contextTokens": 200000,
     "systemPromptReport": {
       "source": "run",
       "generatedAt": 1777690340534,
@@ -959,6 +956,8 @@
     "cacheRead": 49984,
     "cacheWrite": 0,
     "totalTokens": 50797,
-    "totalTokensFresh": true
+    "totalTokensFresh": true,
+    "providerOverride": "coze",
+    "modelOverride": "claude-opus-4-6"
   }
 }
