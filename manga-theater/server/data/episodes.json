@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "id": "98b7c842-ece8-42da-a0f7-183825e0b8de",
+    "projectId": "bd3d7e33-d7e5-4763-9494-09b87fb0842d",
+    "title": "第1集 测试",
+    "episodeNumber": 1,
+    "description": "测试剧集",
+    "status": "draft",
+    "totalDuration": 0,
+    "createdAt": "2026-05-06T10:01:14.148Z",
+    "updatedAt": "2026-05-06T10:01:14.148Z"
+  }
+]

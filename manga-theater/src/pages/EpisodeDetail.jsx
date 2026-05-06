@@ -36,10 +36,18 @@ export default function EpisodeDetail() {
 
   // 加载数据
   useEffect(() => {
-    loadData();
+    if (projectId && episodeId) {
+      loadData();
+    }
   }, [projectId, episodeId]);
 
   const loadData = async () => {
+    if (!projectId || !episodeId) {
+      console.error('Missing projectId or episodeId');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
