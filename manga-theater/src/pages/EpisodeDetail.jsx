@@ -1,565 +1,365 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, Plus, Edit3, Trash2, Image, Video, Volume2,
-  Clock, ChevronRight, GripVertical, Film, 
-  Camera, MessageSquare, Sun, Moon, Play, Save
+  Plus, Play, ChevronRight, CheckCircle, Clock, AlertCircle,
+  Edit2, Trash2, ArrowLeft, BookOpen, Film, Image, Video, Music, Download
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:3001/api';
 
-// 摄像机角度选项
-const CAMERA_OPTIONS = [
-  { value: 'wide', label: '全景' },
-  { value: 'medium', label: '中景' },
-  { value: 'close', label: '近景' },
-  { value: 'close_up', label: '特写' },
-  { value: 'over_shoulder', label: '过肩' },
-  { value: 'pov', label: '主观镜头' },
+// 工作流程步骤定义
+const WORKFLOW_STEPS = [
+  { id: 'script', title: '剧本创作', description: '编写剧本内容，管理对话和旁白', icon: BookOpen, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-100' },
+  { id: 'storyboard', title: '分镜设计', description: '创建和管理分镜，设置镜头参数', icon: Film, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-100' },
+  { id: 'imageGeneration', title: '图片生成', description: 'AI生成分镜图片', icon: Image, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-100' },
+  { id: 'videoGeneration', title: '视频生成', description: '图生视频，转场效果', icon: Video, color: 'from-orange-500 to-amber-500', bgColor: 'bg-orange-100' },
+  { id: 'audioMixing', title: '配音合成', description: '角色配音，BGM背景音乐', icon: Music, color: 'from-pink-500 to-rose-500', bgColor: 'bg-pink-100' },
+  { id: 'export', title: '预览导出', description: '最终预览，导出视频', icon: Download, color: 'from-gray-600 to-gray-800', bgColor: 'bg-gray-100' },
 ];
-
-// 时段选项
-const TIME_OPTIONS = [
-  { value: 'morning', label: '清晨' },
-  { value: 'day', label: '白天' },
-  { value: 'afternoon', label: '下午' },
-  { value: 'evening', label: '傍晚' },
-  { value: 'night', label: '夜晚' },
-  { value: 'midnight', label: '深夜' },
-];
-
-// 获取状态信息
-const getStatusInfo = (status) => {
-  const info = {
-    pending: { text: '待生成', color: 'text-gray-500 bg-gray-100' },
-    generating: { text: '生成中', color: 'text-blue-600 bg-blue-100' },
-    completed: { text: '已完成', color: 'text-green-600 bg-green-100' },
-    failed: { text: '失败', color: 'text-red-600 bg-red-100' },
-  };
-  return info[status] || info.pending;
-};
 
 export default function EpisodeDetail() {
-  const { id, episodeId } = useParams();
+  const { projectId, episodeId } = useParams();
   const navigate = useNavigate();
-  
   const [episode, setEpisode] = useState(null);
   const [project, setProject] = useState(null);
+  const [scenes, setScenes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingScene, setEditingScene] = useState(null);
-  const [showSceneModal, setShowSceneModal] = useState(false);
-  const [newScene, setNewScene] = useState({
-    shotNumber: 1,
-    camera: 'medium',
-    timeOfDay: 'day',
-    script: '',
-    dialogue: '',
-    narration: '',
-    characters: [],
-    location: '',
-  });
+  const [error, setError] = useState(null);
+  const [activeStep, setActiveStep] = useState(null);
+  const [editingContent, setEditingContent] = useState({});
 
-  // 获取数据
+  // 加载数据
   useEffect(() => {
-    fetchData();
-  }, [id, episodeId]);
+    loadData();
+  }, [projectId, episodeId]);
 
-  const fetchData = async () => {
+  const loadData = async () => {
     try {
-      const [projectRes, episodeRes] = await Promise.all([
-        fetch(`${API_BASE}/projects/${id}`),
-        fetch(`${API_BASE}/projects/${id}/episodes/${episodeId}`),
-      ]);
+      setLoading(true);
       
+      // 并行请求项目和剧集
+      const [projectRes, episodeRes] = await Promise.all([
+        fetch(`${API_BASE}/projects/${projectId}`),
+        fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}`)
+      ]);
+
       const projectData = await projectRes.json();
       const episodeData = await episodeRes.json();
-      
-      if (projectData.success) {
-        setProject(projectData.data);
-      }
+
+      if (projectData.success) setProject(projectData.data);
       if (episodeData.success) {
         setEpisode(episodeData.data);
-        setNewScene(prev => ({ ...prev, shotNumber: (episodeData.data.scenes?.length || 0) + 1 }));
+        // 初始化编辑内容
+        setEditingContent({
+          script: episodeData.data.script || '',
+        });
       }
+
+      // 加载分镜
+      const scenesRes = await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}/scenes`);
+      const scenesData = await scenesRes.json();
+      if (scenesData.success) setScenes(scenesData.data || []);
+
     } catch (err) {
-      console.error('获取数据失败:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // 创建分镜
-  const handleCreateScene = async () => {
-    if (!newScene.script.trim()) {
-      alert('请输入分镜描述');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE}/projects/${id}/episodes/${episodeId}/scenes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newScene),
-      });
-      const data = await res.json();
-      if (data.success) {
-        fetchData();
-        setShowSceneModal(false);
-        resetSceneForm();
-      }
-    } catch (err) {
-      console.error('创建分镜失败:', err);
-    }
+  // 获取状态信息
+  const getStatusInfo = (status) => {
+    const statusMap = {
+      pending: { text: '待处理', color: 'bg-gray-100 text-gray-600' },
+      in_progress: { text: '进行中', color: 'bg-blue-100 text-blue-600' },
+      completed: { text: '已完成', color: 'bg-green-100 text-green-600' },
+    };
+    return statusMap[status] || statusMap.pending;
   };
 
-  // 更新分镜
-  const handleUpdateScene = async () => {
-    if (!editingScene) return;
+  // 保存步骤内容
+  const handleSaveStep = async (stepId) => {
+    const content = editingContent[stepId] || '';
+    
     try {
-      const res = await fetch(`${API_BASE}/projects/${id}/episodes/${episodeId}/scenes/${editingScene.id}`, {
+      const res = await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}/steps/${stepId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingScene),
+        body: JSON.stringify({ content, status: 'completed' })
       });
+      
       const data = await res.json();
       if (data.success) {
-        fetchData();
-        setEditingScene(null);
+        setEpisode({ ...episode, [stepId]: content });
+        setActiveStep(null);
+        loadData(); // 重新加载刷新状态
       }
     } catch (err) {
-      console.error('更新分镜失败:', err);
+      console.error('保存失败:', err);
     }
   };
 
-  // 删除分镜
-  const handleDeleteScene = async (sceneId) => {
-    if (!confirm('确定要删除这个分镜吗？')) return;
-    try {
-      const res = await fetch(`${API_BASE}/projects/${id}/episodes/${episodeId}/scenes/${sceneId}`, {
-        method: 'DELETE',
-      });
-      const data = await res.json();
-      if (data.success) {
-        fetchData();
-      }
-    } catch (err) {
-      console.error('删除分镜失败:', err);
-    }
-  };
+  // 计算进度
+  const completedSteps = WORKFLOW_STEPS.filter(
+    step => episode?.[step.id]?.status === 'completed'
+  ).length;
+  const progress = Math.round((completedSteps / WORKFLOW_STEPS.length) * 100);
 
-  // 重置表单
-  const resetSceneForm = () => {
-    setNewScene({
-      shotNumber: (episode?.scenes?.length || 0) + 1,
-      camera: 'medium',
-      timeOfDay: 'day',
-      script: '',
-      dialogue: '',
-      narration: '',
-      characters: [],
-      location: '',
-    });
-  };
-
-  if (loading) {
+  if (loading || !episode) {
     return (
-      <div className="flex items-center justify-center h-96">
+      <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
       </div>
     );
   }
 
-  if (!episode) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96">
-        <p className="text-gray-500 mb-4">剧集不存在</p>
-        <button onClick={() => navigate(`/project/${id}`)} className="text-purple-600 hover:underline">
-          返回项目
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6">
+    <div className="p-6 space-y-6">
       {/* 顶部导航 */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4">
         <button
-          onClick={() => navigate(`/project/${id}`)}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          onClick={() => navigate(`/project/${projectId}`)}
+          className="p-2 hover:bg-gray-100 rounded-lg"
         >
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
+          <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <span>{project?.name}</span>
-            <ChevronRight className="w-4 h-4" />
-            <span>第{episode.episodeNumber}集</span>
-          </div>
           <h1 className="text-2xl font-bold text-gray-900">{episode.title}</h1>
+          <p className="text-sm text-gray-500">{project?.name} · 第{episode.episodeNumber}集</p>
         </div>
-        <button
-          onClick={() => setShowSceneModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90"
-        >
-          <Plus className="w-5 h-5" />
-          添加分镜
-        </button>
+        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusInfo(episode.status).color}`}>
+          {getStatusInfo(episode.status).text}
+        </span>
+      </div>
+
+      {/* 创作流程步骤 */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <Play className="w-5 h-5 text-purple-600" />
+            创作流程
+          </h2>
+          <div className="flex items-center gap-2">
+            <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-sm text-gray-500">{progress}%</span>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {WORKFLOW_STEPS.map((step, index) => {
+            const Icon = step.icon;
+            const stepData = episode[step.id] || {};
+            const status = stepData.status || 'pending';
+            const statusInfo = getStatusInfo(status);
+            const isNext = status === 'pending' && 
+              (index === 0 || episode[WORKFLOW_STEPS[index - 1].id]?.status === 'completed');
+            const isActive = activeStep === step.id;
+
+            return (
+              <div
+                key={step.id}
+                className={`
+                  relative rounded-2xl border-2 transition-all
+                  ${status === 'completed' ? 'border-green-300 bg-green-50' : 
+                    status === 'in_progress' ? 'border-blue-300 bg-blue-50' :
+                    isNext ? 'border-purple-300 bg-purple-50' :
+                    'border-gray-200 bg-white'}
+                `}
+              >
+                {/* 步骤头部 */}
+                <div 
+                  onClick={() => setActiveStep(isActive ? null : step.id)}
+                  className="p-5 cursor-pointer"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-lg ${step.bgColor} flex items-center justify-center`}>
+                        <Icon className={`w-5 h-5 bg-gradient-to-br ${step.color} bg-clip-text`} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{step.title}</h3>
+                        <p className="text-sm text-gray-500 mt-0.5">{step.description}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${isActive ? 'rotate-90' : ''}`} />
+                  </div>
+
+                  {/* 状态标签 */}
+                  <div className="flex items-center justify-between mt-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                      {statusInfo.text}
+                    </span>
+                    {status === 'completed' && (
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    )}
+                    {status === 'pending' && isNext && (
+                      <span className="text-xs text-purple-600 font-medium">下一步</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 展开的编辑区域 */}
+                {isActive && (
+                  <div className="px-5 pb-5 pt-0 border-t border-gray-200 mt-2">
+                    <div className="pt-4 space-y-4">
+                      {step.id === 'script' && (
+                        <>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">剧本内容</label>
+                            <textarea
+                              value={editingContent.script || ''}
+                              onChange={(e) => setEditingContent({...editingContent, script: e.target.value})}
+                              placeholder="输入剧本内容..."
+                              rows={8}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveStep('script')}
+                              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+                            >
+                              保存剧本
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {step.id === 'storyboard' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            当前分镜数：{scenes.length}
+                          </p>
+                          <button
+                            onClick={() => {/* TODO: 打开分镜列表 */}}
+                            className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+                          >
+                            管理分镜
+                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveStep('storyboard')}
+                              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                            >
+                              标记完成
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {step.id === 'imageGeneration' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            {scenes.length > 0 ? `已生成 ${scenes.filter(s => s.image).length}/${scenes.length} 张图片` : '请先完成分镜设计'}
+                          </p>
+                          <button
+                            onClick={() => handleSaveStep('imageGeneration')}
+                            disabled={scenes.length === 0}
+                            className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+                          >
+                            开始生成
+                          </button>
+                        </div>
+                      )}
+
+                      {step.id === 'videoGeneration' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            需要先生成图片
+                          </p>
+                          <button
+                            onClick={() => handleSaveStep('videoGeneration')}
+                            disabled={!episode.imageGeneration?.status}
+                            className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm disabled:opacity-50"
+                          >
+                            开始生成
+                          </button>
+                        </div>
+                      )}
+
+                      {step.id === 'audioMixing' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            配置角色配音和背景音乐
+                          </p>
+                          <button
+                            onClick={() => handleSaveStep('audioMixing')}
+                            className="w-full px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 text-sm"
+                          >
+                            配置配音
+                          </button>
+                        </div>
+                      )}
+
+                      {step.id === 'export' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            预览并导出最终视频
+                          </p>
+                          <div className="flex gap-2">
+                            <button className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">
+                              预览
+                            </button>
+                            <button className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 text-sm">
+                              导出
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* 分镜列表 */}
-      <div className="space-y-4">
-        {episode.scenes?.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
-            <Film className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-700 mb-2">还没有分镜</h3>
-            <p className="text-gray-500 mb-4">开始创建你的第一个分镜吧</p>
-            <button
-              onClick={() => setShowSceneModal(true)}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-            >
-              创建分镜
-            </button>
+      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <Film className="w-5 h-5 text-purple-600" />
+            分镜管理
+          </h2>
+          <button className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
+            <Plus className="w-4 h-4" />
+            添加分镜
+          </button>
+        </div>
+
+        {scenes.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <Film className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>暂无分镜</p>
+            <p className="text-sm mt-1">在剧本创作完成后添加分镜</p>
           </div>
         ) : (
-          episode.scenes?.map((scene, index) => (
-            <div
-              key={scene.id}
-              className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
-            >
-              {/* 分镜头部 */}
-              <div className="flex items-center gap-4 p-4 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <GripVertical className="w-5 h-5 text-gray-400 cursor-grab" />
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">
-                    {scene.shotNumber}
-                  </div>
+          <div className="space-y-3">
+            {scenes.map((scene, index) => (
+              <div key={scene.id} className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 font-bold">
+                  {index + 1}
                 </div>
-                
-                <div className="flex-1 grid grid-cols-4 gap-4">
-                  {/* 摄像机 */}
-                  <div className="flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">
-                      {CAMERA_OPTIONS.find(c => c.value === scene.camera)?.label || '中景'}
-                    </span>
-                  </div>
-                  
-                  {/* 时段 */}
-                  <div className="flex items-center gap-2">
-                    {scene.timeOfDay?.includes('night') || scene.timeOfDay === 'midnight' ? (
-                      <Moon className="w-4 h-4 text-gray-400" />
-                    ) : (
-                      <Sun className="w-4 h-4 text-gray-400" />
-                    )}
-                    <span className="text-sm text-gray-600">
-                      {TIME_OPTIONS.find(t => t.value === scene.timeOfDay)?.label || '白天'}
-                    </span>
-                  </div>
-                  
-                  {/* 地点 */}
-                  {scene.location && (
-                    <div className="flex items-center gap-2">
-                      <Film className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-600 truncate">{scene.location}</span>
-                    </div>
-                  )}
-                  
-                  {/* 状态 */}
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusInfo(scene.imageStatus).color}`}>
-                      {getStatusInfo(scene.imageStatus).text}
-                    </span>
-                  </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-gray-900">{scene.shotNumber || `镜头 ${index + 1}`}</h3>
+                  <p className="text-sm text-gray-500 truncate">{scene.script || '暂无描述'}</p>
                 </div>
-
-                {/* 操作按钮 */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setEditingScene(scene)}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
-                  >
-                    <Edit3 className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteScene(scene.id)}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </button>
-                </div>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  scene.image ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {scene.image ? '已生成' : '待生成'}
+                </span>
               </div>
-
-              {/* 分镜内容 */}
-              <div className="p-4">
-                {/* 画面描述 */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">画面描述</h4>
-                  <p className="text-gray-600 bg-gray-50 rounded-lg p-3">
-                    {scene.script || '暂无描述'}
-                  </p>
-                </div>
-
-                {/* 对话/旁白 */}
-                {(scene.dialogue || scene.narration) && (
-                  <div className="grid grid-cols-2 gap-4">
-                    {scene.dialogue && (
-                      <div className="bg-blue-50 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <MessageSquare className="w-4 h-4 text-blue-600" />
-                          <span className="text-sm font-medium text-blue-700">对话</span>
-                        </div>
-                        <p className="text-blue-800">{scene.dialogue}</p>
-                      </div>
-                    )}
-                    {scene.narration && (
-                      <div className="bg-purple-50 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Volume2 className="w-4 h-4 text-purple-600" />
-                          <span className="text-sm font-medium text-purple-700">旁白</span>
-                        </div>
-                        <p className="text-purple-800">{scene.narration}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 生成结果预览 */}
-                <div className="mt-4 flex items-center gap-4">
-                  {/* 图片预览 */}
-                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <Image className="w-5 h-5 text-gray-400" />
-                    {scene.imageUrl ? (
-                      <img src={scene.imageUrl} alt="" className="w-20 h-14 object-cover rounded" />
-                    ) : (
-                      <span className="text-sm text-gray-500">待生成</span>
-                    )}
-                  </div>
-                  
-                  {/* 视频预览 */}
-                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <Video className="w-5 h-5 text-gray-400" />
-                    {scene.videoUrl ? (
-                      <video src={scene.videoUrl} className="w-20 h-14 object-cover rounded" />
-                    ) : (
-                      <span className="text-sm text-gray-500">待生成</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
-
-      {/* 添加分镜弹窗 */}
-      {showSceneModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 m-4 my-8">
-            <h2 className="text-xl font-bold mb-4">添加分镜</h2>
-            
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-              {/* 分镜编号 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">分镜编号</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newScene.shotNumber}
-                    onChange={(e) => setNewScene({...newScene, shotNumber: parseInt(e.target.value) || 1})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">摄像机角度</label>
-                  <select
-                    value={newScene.camera}
-                    onChange={(e) => setNewScene({...newScene, camera: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  >
-                    {CAMERA_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* 时段和地点 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">时段</label>
-                  <select
-                    value={newScene.timeOfDay}
-                    onChange={(e) => setNewScene({...newScene, timeOfDay: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  >
-                    {TIME_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">地点</label>
-                  <input
-                    type="text"
-                    value={newScene.location}
-                    onChange={(e) => setNewScene({...newScene, location: e.target.value})}
-                    placeholder="例如：咖啡馆"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-              </div>
-
-              {/* 画面描述 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">画面描述 *</label>
-                <textarea
-                  value={newScene.script}
-                  onChange={(e) => setNewScene({...newScene, script: e.target.value})}
-                  placeholder="描述这个分镜的画面..."
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
-                />
-              </div>
-
-              {/* 对话 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">对话</label>
-                <textarea
-                  value={newScene.dialogue}
-                  onChange={(e) => setNewScene({...newScene, dialogue: e.target.value})}
-                  placeholder="角色对话..."
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
-                />
-              </div>
-
-              {/* 旁白 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">旁白</label>
-                <textarea
-                  value={newScene.narration}
-                  onChange={(e) => setNewScene({...newScene, narration: e.target.value})}
-                  placeholder="旁白描述..."
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowSceneModal(false);
-                  resetSceneForm();
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleCreateScene}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90"
-              >
-                创建
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 编辑分镜弹窗 */}
-      {editingScene && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 m-4 my-8">
-            <h2 className="text-xl font-bold mb-4">编辑分镜 #{editingScene.shotNumber}</h2>
-            
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">摄像机角度</label>
-                  <select
-                    value={editingScene.camera}
-                    onChange={(e) => setEditingScene({...editingScene, camera: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  >
-                    {CAMERA_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">时段</label>
-                  <select
-                    value={editingScene.timeOfDay}
-                    onChange={(e) => setEditingScene({...editingScene, timeOfDay: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  >
-                    {TIME_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">地点</label>
-                <input
-                  type="text"
-                  value={editingScene.location}
-                  onChange={(e) => setEditingScene({...editingScene, location: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">画面描述</label>
-                <textarea
-                  value={editingScene.script}
-                  onChange={(e) => setEditingScene({...editingScene, script: e.target.value})}
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">对话</label>
-                <textarea
-                  value={editingScene.dialogue}
-                  onChange={(e) => setEditingScene({...editingScene, dialogue: e.target.value})}
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">旁白</label>
-                <textarea
-                  value={editingScene.narration}
-                  onChange={(e) => setEditingScene({...editingScene, narration: e.target.value})}
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setEditingScene(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleUpdateScene}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
