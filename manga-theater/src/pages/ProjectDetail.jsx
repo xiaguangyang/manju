@@ -231,13 +231,8 @@ export default function ProjectDetail() {
     updateProjectStatus(stepId, 'pending');
   };
 
-  // 计算项目进度
-  const completedSteps = WORKFLOW_STEPS.filter(
-    step => project[step.id]?.status === 'completed'
-  ).length;
-  const progress = Math.round((completedSteps / WORKFLOW_STEPS.length) * 100);
-
-  if (loading) {
+  // 加载状态检查
+  if (loading || !project) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
@@ -248,6 +243,12 @@ export default function ProjectDetail() {
   if (!project) {
     return <div className="p-6 text-center text-gray-500">项目不存在</div>;
   }
+
+  // 计算项目进度
+  const completedSteps = WORKFLOW_STEPS.filter(
+    step => project[step.id]?.status === 'completed'
+  ).length;
+  const progress = Math.round((completedSteps / WORKFLOW_STEPS.length) * 100);
 
   return (
     <div className="p-6">
