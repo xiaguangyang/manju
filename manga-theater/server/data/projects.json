@@ -1,0 +1,16 @@
+[
+  {
+    "id": "bd3d7e33-d7e5-4763-9494-09b87fb0842d",
+    "name": "测试漫剧项目",
+    "description": "这是一个测试项目",
+    "cover": null,
+    "tags": [],
+    "settings": {
+      "style": "anime",
+      "aspectRatio": "16:9",
+      "resolution": "1920x1080"
+    },
+    "createdAt": "2026-05-06T06:23:16.792Z",
+    "updatedAt": "2026-05-06T06:23:16.792Z"
+  }
+]
