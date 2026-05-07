@@ -43,43 +43,50 @@ export default function EpisodeDetail() {
 
   const loadData = async () => {
     if (!projectId || !episodeId) {
-      console.error('Missing projectId or episodeId');
+      console.error('Missing projectId or episodeId', { projectId, episodeId });
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
+      console.log('Loading episode:', { projectId, episodeId });
       
-      // 并行请求项目和剧集
-      const [projectRes, episodeRes] = await Promise.all([
-        fetch(`${API_BASE}/projects/${projectId}`),
-        fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}`)
-      ]);
-
+      // 串行请求，确保每个请求成功
+      const projectRes = await fetch(`${API_BASE}/projects/${projectId}`);
+      if (!projectRes.ok) throw new Error(`Project API: ${projectRes.status}`);
       const projectData = await projectRes.json();
-      const episodeData = await episodeRes.json();
-
       if (projectData.success) setProject(projectData.data);
+
+      const episodeRes = await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}`);
+      if (!episodeRes.ok) throw new Error(`Episode API: ${episodeRes.status}`);
+      const episodeData = await episodeRes.json();
       if (episodeData.success) {
         setEpisode(episodeData.data);
-        // 初始化编辑内容
         setEditingContent({
           script: episodeData.data.script || '',
         });
+      } else {
+        throw new Error(episodeData.error || 'Failed to load episode');
       }
 
       // 加载分镜
       const scenesRes = await fetch(`${API_BASE}/projects/${projectId}/episodes/${episodeId}/scenes`);
-      const scenesData = await scenesRes.json();
-      if (scenesData.success) setScenes(scenesData.data || []);
+      if (scenesRes.ok) {
+        const scenesData = await scenesRes.json();
+        if (scenesData.success) setScenes(scenesData.data || []);
+      }
 
       // 加载角色列表
       const charsRes = await fetch(`${API_BASE}/characters?projectId=${projectId}`);
-      const charsData = await charsRes.json();
-      if (charsData.success) setCharacters(charsData.data || []);
+      if (charsRes.ok) {
+        const charsData = await charsRes.json();
+        if (charsData.success) setCharacters(charsData.data || []);
+      }
 
+      console.log('Episode loaded successfully');
     } catch (err) {
+      console.error('Load episode error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
